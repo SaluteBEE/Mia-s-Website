@@ -1,6 +1,8 @@
 <template>
   <div class="page">
-    <header class="search-bar">
+    <div id="game-container"></div>
+
+    <div class="overlay">
       <form class="search-form" @submit.prevent="onSearch">
         <select v-model="engine">
           <option value="https://www.google.com/search?q=">Google</option>
@@ -11,13 +13,7 @@
         <input v-model="query" placeholder="搜索..." />
         <button type="submit">搜索</button>
       </form>
-    </header>
-
-    <main>
-      <div id="game-wrapper">
-        <div id="game-container"></div>
-      </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -49,37 +45,56 @@ const onSearch = () => {
 
 <style scoped>
 .page {
+  position: relative;
   min-height: 100vh;
-  background: linear-gradient(180deg, #0b1d36, #0b2646);
+  background: #000;
   color: #e8f3ff;
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
 }
 
-.search-bar {
-  padding: 12px 16px;
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+#game-container {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.overlay {
+  position: fixed;
+  left: 50%;
+  top: 16%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: min(90%, 640px);
+  display: flex;
+  justify-content: center;
 }
 
 .search-form {
+  width: 100%;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
 }
 
 select,
 input {
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
   color: #e8f3ff;
 }
 
 select {
-  min-width: 130px;
+  min-width: 150px;
 }
 
 input {
@@ -87,8 +102,8 @@ input {
 }
 
 button {
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
   border: none;
   background: #3baaff;
   color: #0b1d36;
@@ -98,30 +113,5 @@ button {
 
 button:hover {
   background: #6cc1ff;
-}
-
-main {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 16px;
-}
-
-#game-wrapper {
-  width: 100%;
-  max-width: 520px;
-  aspect-ratio: 430 / 900;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.08), transparent 40%), rgba(0, 0, 0, 0.25);
-}
-
-#game-container {
-  width: 100%;
-  height: 100%;
 }
 </style>

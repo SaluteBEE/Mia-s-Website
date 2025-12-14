@@ -11,8 +11,7 @@ const baseConfig = {
   backgroundColor: '#87cefa',
   pixelArt: true,
   scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    mode: Phaser.Scale.RESIZE, // 跟随父容器铺满
     width: designWidth,
     height: designHeight,
   },
