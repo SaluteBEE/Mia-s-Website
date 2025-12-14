@@ -1,0 +1,57 @@
+# =========================
+# Node / npm
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Build output
+# =========================
+dist/
+dist-ssr/
+
+# =========================
+# Vite
+# =========================
+.vite/
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.local
+.env.*.local
+
+# =========================
+# Editor / OS
+# =========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+
+# =========================
+# Optional caches
+# =========================
+.cache/
+.eslintcache
+
+# =========================
+# Coverage / test
+# =========================
+coverage/
+
+# =========================
+# Phaser (optional)
+# =========================
+# If you generate assets at runtime
+phaser-cache/
