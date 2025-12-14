@@ -1,0 +1,36 @@
+:root {
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #e8f3ff;
+  background-color: #0b1d36;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: #0b1d36;
+  color: #e8f3ff;
+}
+
+a {
+  color: #6cc1ff;
+}
+
+a:hover {
+  color: #9ed7ff;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
