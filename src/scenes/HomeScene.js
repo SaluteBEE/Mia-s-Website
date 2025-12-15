@@ -29,7 +29,15 @@ export default class HomeScene extends Phaser.Scene {
     this.viewWidth = w;
     this.viewHeight = h;
 
-    // 背景
+    // 行星参数
+    this.planetCenter = { x: w / 2, y: h + h * 0.8 };
+    this.planetRadius = h * 1.25;
+    this.planetAngle = 0;
+    this.targetRotation = null;
+    this.targetCallback = null;
+    this.pendingStatusLabel = null;
+
+    // 背景与昼夜遮罩
     this.add.image(w / 2, h / 2, 'homeBg').setDisplaySize(w, h);
     this.dayNightOverlay = this.add
       .rectangle(w / 2, h / 2, w, h, 0x00142c, 0.12)
@@ -39,14 +47,6 @@ export default class HomeScene extends Phaser.Scene {
     this.dayNightCheckAccumulator = 0;
     this.debugOverrideTs = null;
     this.loadSunriseSunset();
-
-    // 行星参数
-    this.planetCenter = { x: w / 2, y: h + h * 0.8 };
-    this.planetRadius = h * 1.25;
-    this.planetAngle = 0;
-    this.targetRotation = null;
-    this.targetCallback = null;
-    this.pendingStatusLabel = null;
 
     this.currentCoordText = this.add.text(12, 68, '角度: 0°', {
       font: '16px Arial',
@@ -138,11 +138,10 @@ export default class HomeScene extends Phaser.Scene {
       this.pointObjects.push({ point, marker, label });
     });
 
-    // 配置化物体（床、桌子等）
+    // 配置化物体（床、桌子、广告牌、火箭）
     this.worldObjects = [];
     this.rocketEntry = null;
     this.rocketBaseEntry = null;
-    this.rocketLaunchState = null;
     this.isRocketLaunching = false;
     worldObjects.forEach((cfg) => {
       const img = this.add
@@ -270,7 +269,6 @@ export default class HomeScene extends Phaser.Scene {
       this.planetImage.setRotation(this.planetAngle);
     }
 
-    this.updateRocketLaunch(delta);
     this.updateActionPointPositions();
 
     // 白天/黑夜遮罩，每 30 秒检查一次
@@ -310,23 +308,6 @@ export default class HomeScene extends Phaser.Scene {
       if (cfg.id === 'rocket' && this.isRocketLaunching) {
         return;
       }
-
-      // 优先跟随火箭底座，避免旋转时相对位移
-      if (cfg.id === 'rocket' && this.rocketBaseEntry) {
-        const baseCfg = this.rocketBaseEntry.cfg;
-        const baseAngle = baseCfg.angle + this.planetAngle;
-        const basePos = this.getPointOnPlanet(baseAngle);
-        const baseYOffset = baseCfg.yOffset ?? 0;
-        const yOffset = cfg.yOffset ?? 0;
-        const x = basePos.x;
-        const y = basePos.y + baseYOffset + yOffset;
-        img.setPosition(x, y);
-        img.setRotation(baseAngle);
-        label.setPosition(x, y - (img.displayHeight || 40) - 8);
-        label.setRotation(0);
-        return;
-      }
-
       const angle = cfg.angle + this.planetAngle;
       const pos = this.getPointOnPlanet(angle);
       const yOffset = cfg.yOffset ?? 0;
@@ -362,38 +343,28 @@ export default class HomeScene extends Phaser.Scene {
     if (img.disableInteractive) img.disableInteractive();
     if (label.disableInteractive) label.disableInteractive();
 
-    this.rocketLaunchState = {
-      elapsed: 0,
-      duration: 1400,
-      riseDistance: this.viewHeight * 0.9,
-      startAlpha: img.alpha,
-    };
-  }
+    const startPos = { x: img.x, y: img.y, rotation: img.rotation };
+    const startAlpha = img.alpha;
+    const riseDistance = this.viewHeight * 0.85;
 
-  updateRocketLaunch(delta) {
-    if (!this.isRocketLaunching || !this.rocketLaunchState || !this.rocketEntry) return;
-    const { img, label, cfg } = this.rocketEntry;
-    const baseCfg = this.rocketBaseEntry?.cfg;
-    const state = this.rocketLaunchState;
-    state.elapsed += delta;
-    const t = Math.min(1, state.elapsed / state.duration);
-    const angle = baseCfg ? baseCfg.angle + this.planetAngle : cfg.angle + this.planetAngle;
-    const pos = this.getPointOnPlanet(angle);
-    const baseYOffset = baseCfg ? baseCfg.yOffset ?? 0 : 0;
-    const yOffset = (cfg.yOffset ?? 0) - state.riseDistance * t;
-    img.setPosition(pos.x, pos.y + baseYOffset + yOffset);
-    img.setRotation(angle);
-    const alpha = Phaser.Math.Linear(state.startAlpha, 0.15, t);
-    img.setAlpha(alpha);
-
-    if (t >= 1) {
-      this.isRocketLaunching = false;
-      this.rocketLaunchState = null;
-      if (cfg.interactive && img.setInteractive) img.setInteractive({ useHandCursor: true });
-      if (cfg.interactive && label.setInteractive) label.setInteractive({ useHandCursor: true });
-      img.setAlpha(state.startAlpha);
-      this.updateActionPointPositions();
-    }
+    this.tweens.add({
+      targets: img,
+      y: img.y - riseDistance,
+      alpha: 0.2,
+      duration: 1200,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        this.time.delayedCall(500, () => {
+          img.setPosition(startPos.x, startPos.y);
+          img.setRotation(cfg.angle + this.planetAngle);
+          img.setAlpha(startAlpha);
+          if (cfg.interactive && img.setInteractive) img.setInteractive({ useHandCursor: true });
+          if (cfg.interactive && label.setInteractive) label.setInteractive({ useHandCursor: true });
+          this.isRocketLaunching = false;
+          this.updateActionPointPositions();
+        });
+      },
+    });
   }
 
   createButton(x, y, label, onDown, onUp) {
@@ -546,12 +517,8 @@ export default class HomeScene extends Phaser.Scene {
     }
     const nowTs = this.debugOverrideTs ?? Date.now();
     const isNight = nowTs < this.sunriseTimestamp || nowTs >= this.sunsetTimestamp;
-    const dayColor = 0x99d5ff;
-    const nightColor = 0x00142c;
-    const targetColor = isNight ? nightColor : dayColor;
-    const targetAlpha = isNight ? 0.75 : 0.05;
+    const targetAlpha = isNight ? 0.75 : 0.12;
     if (!this.dayNightOverlay) return;
-    this.dayNightOverlay.fillColor = targetColor;
     if (force || Math.abs(this.dayNightOverlay.alpha - targetAlpha) > 0.01) {
       this.dayNightOverlay.setAlpha(targetAlpha);
     }
