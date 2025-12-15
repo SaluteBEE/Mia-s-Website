@@ -37,6 +37,23 @@
         <button type="submit">搜索</button>
       </form>
     </div>
+
+    <div class="debug-panel">
+      <div class="debug-block">
+        <label>
+          调试时间（小时）
+          <input
+            type="range"
+            min="0"
+            max="23"
+            v-model.number="debugHour"
+            @input="applyDebugHour"
+          />
+          <span class="debug-hour">{{ debugHour }}:00</span>
+        </label>
+        <button type="button" class="ghost-btn" @click="clearDebugHour">恢复实时</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -51,6 +68,7 @@ const dateText = ref('');
 const weekdayText = ref('');
 const timeZone = ref('Asia/Shanghai');
 const currentTime = ref('');
+const debugHour = ref(12);
 const weatherText = ref('加载中...');
 const tempText = ref('--°C');
 let timer = null;
@@ -85,6 +103,24 @@ const onSearch = () => {
   const keyword = query.value.trim();
   if (!keyword) return;
   window.open(engine.value + encodeURIComponent(keyword), '_blank');
+};
+
+const applyDebugHour = () => {
+  const game = phaserGame;
+  if (!game) return;
+  const scene = game.scene.getScene('HomeScene');
+  if (scene?.setDebugHour) {
+    scene.setDebugHour(debugHour.value);
+  }
+};
+
+const clearDebugHour = () => {
+  const game = phaserGame;
+  if (!game) return;
+  const scene = game.scene.getScene('HomeScene');
+  if (scene?.clearDebugTime) {
+    scene.clearDebugTime();
+  }
 };
 
 function updateDate() {
@@ -315,5 +351,52 @@ button:hover {
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.08);
   color: #e8f3ff;
+}
+
+.debug-panel {
+  position: fixed;
+  right: 24px;
+  top: 20%;
+  z-index: 2;
+  width: min(320px, 26vw);
+}
+
+.debug-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  color: #e8f3ff;
+  font-size: 13px;
+}
+
+.debug-block input[type='range'] {
+  flex: 1;
+}
+
+.debug-hour {
+  min-width: 54px;
+  display: inline-block;
+  text-align: right;
+  font-weight: 700;
+}
+
+.ghost-btn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: transparent;
+  color: #e8f3ff;
+  cursor: pointer;
+}
+
+.ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 </style>

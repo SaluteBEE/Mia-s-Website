@@ -31,6 +31,14 @@ export default class HomeScene extends Phaser.Scene {
 
     // 背景
     this.add.image(w / 2, h / 2, 'homeBg').setDisplaySize(w, h);
+    this.dayNightOverlay = this.add
+      .rectangle(w / 2, h / 2, w, h, 0x00142c, 0.12)
+      .setDepth(0.05);
+    this.sunriseTimestamp = null;
+    this.sunsetTimestamp = null;
+    this.dayNightCheckAccumulator = 0;
+    this.debugOverrideTs = null;
+    this.loadSunriseSunset();
 
     // 行星参数
     this.planetCenter = { x: w / 2, y: h + h * 0.8 };
@@ -132,6 +140,10 @@ export default class HomeScene extends Phaser.Scene {
 
     // 配置化物体（床、桌子等）
     this.worldObjects = [];
+    this.rocketEntry = null;
+    this.rocketBaseEntry = null;
+    this.rocketLaunchState = null;
+    this.isRocketLaunching = false;
     worldObjects.forEach((cfg) => {
       const img = this.add
         .image(0, 0, cfg.textureKey)
@@ -156,6 +168,8 @@ export default class HomeScene extends Phaser.Scene {
           this.moveToAngle(cfg.angle, () => this.activities.startSleep());
         } else if (cfg.action === 'eat') {
           this.moveToAngle(cfg.angle, () => this.activities.startEatMenu());
+        } else if (cfg.action === 'launch') {
+          this.moveToAngle(cfg.angle, () => this.startRocketLaunch());
         }
       };
       if (cfg.interactive) {
@@ -164,7 +178,13 @@ export default class HomeScene extends Phaser.Scene {
         label.on('pointerdown', handleObjClick);
       }
 
-      this.worldObjects.push({ cfg, img, label });
+      const entry = { cfg, img, label };
+      if (cfg.id === 'rocket') {
+        this.rocketEntry = entry;
+      } else if (cfg.id === 'rocketBase') {
+        this.rocketBaseEntry = entry;
+      }
+      this.worldObjects.push(entry);
     });
 
     this.updateActionPointPositions();
@@ -250,7 +270,15 @@ export default class HomeScene extends Phaser.Scene {
       this.planetImage.setRotation(this.planetAngle);
     }
 
+    this.updateRocketLaunch(delta);
     this.updateActionPointPositions();
+
+    // 白天/黑夜遮罩，每 30 秒检查一次
+    this.dayNightCheckAccumulator += delta;
+    if (this.dayNightCheckAccumulator >= 30000) {
+      this.updateDayNight();
+      this.dayNightCheckAccumulator = 0;
+    }
 
     const deg = Phaser.Math.Wrap(this.planetAngle * Phaser.Math.RAD_TO_DEG * -1, 0, 360);
     this.currentCoordText.setText(`角度: ${deg.toFixed(1)}°`);
@@ -279,6 +307,26 @@ export default class HomeScene extends Phaser.Scene {
 
     // 配置化物体的位置更新
     this.worldObjects.forEach(({ cfg, img, label }) => {
+      if (cfg.id === 'rocket' && this.isRocketLaunching) {
+        return;
+      }
+
+      // 优先跟随火箭底座，避免旋转时相对位移
+      if (cfg.id === 'rocket' && this.rocketBaseEntry) {
+        const baseCfg = this.rocketBaseEntry.cfg;
+        const baseAngle = baseCfg.angle + this.planetAngle;
+        const basePos = this.getPointOnPlanet(baseAngle);
+        const baseYOffset = baseCfg.yOffset ?? 0;
+        const yOffset = cfg.yOffset ?? 0;
+        const x = basePos.x;
+        const y = basePos.y + baseYOffset + yOffset;
+        img.setPosition(x, y);
+        img.setRotation(baseAngle);
+        label.setPosition(x, y - (img.displayHeight || 40) - 8);
+        label.setRotation(0);
+        return;
+      }
+
       const angle = cfg.angle + this.planetAngle;
       const pos = this.getPointOnPlanet(angle);
       const yOffset = cfg.yOffset ?? 0;
@@ -300,6 +348,52 @@ export default class HomeScene extends Phaser.Scene {
     this.pendingStatusLabel = null;
     this.targetRotation = Phaser.Math.Angle.Wrap(-targetAngle);
     this.targetCallback = callback || null;
+  }
+
+  startRocketLaunch() {
+    if (!this.rocketEntry || this.isRocketLaunching) return;
+    const { img, label, cfg } = this.rocketEntry;
+    this.isRocketLaunching = true;
+    this.statusText.setText('火箭发射！');
+    this.logAction('火箭发射');
+    const cam = this.cameras.main;
+    cam.shake(900, 0.01);
+
+    if (img.disableInteractive) img.disableInteractive();
+    if (label.disableInteractive) label.disableInteractive();
+
+    this.rocketLaunchState = {
+      elapsed: 0,
+      duration: 1400,
+      riseDistance: this.viewHeight * 0.9,
+      startAlpha: img.alpha,
+    };
+  }
+
+  updateRocketLaunch(delta) {
+    if (!this.isRocketLaunching || !this.rocketLaunchState || !this.rocketEntry) return;
+    const { img, label, cfg } = this.rocketEntry;
+    const baseCfg = this.rocketBaseEntry?.cfg;
+    const state = this.rocketLaunchState;
+    state.elapsed += delta;
+    const t = Math.min(1, state.elapsed / state.duration);
+    const angle = baseCfg ? baseCfg.angle + this.planetAngle : cfg.angle + this.planetAngle;
+    const pos = this.getPointOnPlanet(angle);
+    const baseYOffset = baseCfg ? baseCfg.yOffset ?? 0 : 0;
+    const yOffset = (cfg.yOffset ?? 0) - state.riseDistance * t;
+    img.setPosition(pos.x, pos.y + baseYOffset + yOffset);
+    img.setRotation(angle);
+    const alpha = Phaser.Math.Linear(state.startAlpha, 0.15, t);
+    img.setAlpha(alpha);
+
+    if (t >= 1) {
+      this.isRocketLaunching = false;
+      this.rocketLaunchState = null;
+      if (cfg.interactive && img.setInteractive) img.setInteractive({ useHandCursor: true });
+      if (cfg.interactive && label.setInteractive) label.setInteractive({ useHandCursor: true });
+      img.setAlpha(state.startAlpha);
+      this.updateActionPointPositions();
+    }
   }
 
   createButton(x, y, label, onDown, onUp) {
@@ -410,5 +504,73 @@ export default class HomeScene extends Phaser.Scene {
       hour12: false,
       timeZoneName: 'short',
     });
+  }
+
+  async loadSunriseSunset() {
+    const url =
+      'https://api.open-meteo.com/v1/forecast?latitude=39.9042&longitude=116.4074&daily=sunrise,sunset&timezone=Asia/Shanghai';
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('network');
+      const data = await res.json();
+      const sunrise = data?.daily?.sunrise?.[0];
+      const sunset = data?.daily?.sunset?.[0];
+      if (sunrise && sunset) {
+        this.sunriseTimestamp = Date.parse(sunrise);
+        this.sunsetTimestamp = Date.parse(sunset);
+        console.log('北京日出/日落时间', { sunrise, sunset });
+        this.updateDayNight(true);
+      }
+    } catch (e) {
+      console.warn('sunrise/sunset fetch failed, fallback to default', e);
+      this.setDefaultSunTimes();
+      this.updateDayNight(true);
+    }
+  }
+
+  setDefaultSunTimes() {
+    const now = new Date();
+    const base = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    // 北京本地默认 06:00 和 18:30
+    const sunrise = new Date(base);
+    sunrise.setUTCHours(22, 0, 0, 0); // UTC 对应次日 06:00+08:00
+    const sunset = new Date(base);
+    sunset.setUTCHours(10, 30, 0, 0); // UTC 对应当日 18:30+08:00
+    this.sunriseTimestamp = sunrise.getTime();
+    this.sunsetTimestamp = sunset.getTime();
+  }
+
+  updateDayNight(force = false) {
+    if (!this.sunriseTimestamp || !this.sunsetTimestamp) {
+      this.setDefaultSunTimes();
+    }
+    const nowTs = this.debugOverrideTs ?? Date.now();
+    const isNight = nowTs < this.sunriseTimestamp || nowTs >= this.sunsetTimestamp;
+    const dayColor = 0x99d5ff;
+    const nightColor = 0x00142c;
+    const targetColor = isNight ? nightColor : dayColor;
+    const targetAlpha = isNight ? 0.75 : 0.05;
+    if (!this.dayNightOverlay) return;
+    this.dayNightOverlay.fillColor = targetColor;
+    if (force || Math.abs(this.dayNightOverlay.alpha - targetAlpha) > 0.01) {
+      this.dayNightOverlay.setAlpha(targetAlpha);
+    }
+  }
+
+  setDebugHour(hour) {
+    const clamped = Math.max(0, Math.min(23, Number(hour)));
+    const now = new Date();
+    now.setHours(clamped, 0, 0, 0);
+    this.debugOverrideTs = now.getTime();
+    this.dayNightCheckAccumulator = 0;
+    this.updateDayNight(true);
+    console.log(`调试时间设为 ${clamped}:00，ISO=${now.toISOString()}`);
+  }
+
+  clearDebugTime() {
+    this.debugOverrideTs = null;
+    this.dayNightCheckAccumulator = 0;
+    this.updateDayNight(true);
+    console.log('调试时间已清除，恢复实时昼夜');
   }
 }
