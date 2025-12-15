@@ -3,6 +3,8 @@ import tablePng from '../assets/table.png';
 import billboardPng from '../assets/billboard.png';
 import rocketBasePng from '../assets/rocketBase.png';
 import rocketPng from '../assets/rocket.png';
+import kitchenPng from '../assets/kitchen.png';
+import musicPlayerPng from '../assets/musicPlayer.png';
 
 // 配置化的场景物体；按需在这里新增/调整。
 const worldObjects = [
@@ -62,6 +64,28 @@ const worldObjects = [
     depth: 0.6,
     interactive: true,
     action: 'launch',
+  },
+  {
+    id: 'kitchen',
+    name: '厨房',
+    angle: 0.75,
+    textureKey: 'kitchen',
+    texture: kitchenPng,
+    scale: 0.45,
+    yOffset: 8,
+    depth: 0.48,
+    interactive: false,
+  },
+  {
+    id: 'musicPlayer',
+    name: '音乐',
+    angle: -0.05,
+    textureKey: 'musicPlayer',
+    texture: musicPlayerPng,
+    scale: 0.5,
+    yOffset: 6,
+    depth: 0.46,
+    interactive: false,
   },
 ];
 

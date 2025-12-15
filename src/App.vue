@@ -46,10 +46,11 @@
             type="range"
             min="0"
             max="23"
+            step="0.1"
             v-model.number="debugHour"
             @input="applyDebugHour"
           />
-          <span class="debug-hour">{{ debugHour }}:00</span>
+          <span class="debug-hour">{{ formatDebugHour(debugHour) }}</span>
         </label>
         <button type="button" class="ghost-btn" @click="clearDebugHour">恢复实时</button>
       </div>
@@ -121,6 +122,14 @@ const clearDebugHour = () => {
   if (scene?.clearDebugTime) {
     scene.clearDebugTime();
   }
+};
+
+const formatDebugHour = (hourVal) => {
+  const h = Math.floor(hourVal);
+  const m = Math.round((hourVal - h) * 60);
+  const hh = String(h).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  return `${hh}:${mm}`;
 };
 
 function updateDate() {

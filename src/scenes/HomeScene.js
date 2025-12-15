@@ -37,11 +37,13 @@ export default class HomeScene extends Phaser.Scene {
     this.targetCallback = null;
     this.pendingStatusLabel = null;
 
-    // 背景与昼夜遮罩
-    this.add.image(w / 2, h / 2, 'homeBg').setDisplaySize(w, h);
+    // 天空底板与昼夜遮罩（底板直接用填充色，便于动态变色）
+    this.skyRect = this.add
+      .rectangle(w / 2, h / 2, w, h, 0x1a2e57)
+      .setDepth(-2);
     this.dayNightOverlay = this.add
       .rectangle(w / 2, h / 2, w, h, 0x00142c, 0.12)
-      .setDepth(0.05);
+      .setDepth(-1);
     this.sunriseTimestamp = null;
     this.sunsetTimestamp = null;
     this.dayNightCheckAccumulator = 0;
@@ -102,41 +104,8 @@ export default class HomeScene extends Phaser.Scene {
 
     this.cursors = this.input.keyboard.createCursorKeys();
 
-    // 事件点（睡觉由床物体处理，不用圆点）
-    this.actionPoints = [{ key: 'eat', label: '吃饭', baseAngle: 0.45, color: 0xff5722 }];
+    // 事件点圆点删除，改为靠近时显示标签
     this.pointObjects = [];
-
-    this.actionPoints.forEach((point) => {
-      const marker = this.add
-        .circle(0, 0, 14, point.color)
-        .setStrokeStyle(2, 0xffffff)
-        .setInteractive({ useHandCursor: true })
-        .setDepth(0.5);
-
-      const handleClick = () => {
-        if (point.key === 'eat') {
-          this.moveToAngle(point.baseAngle, () => this.activities.startEatMenu());
-        } else {
-          this.statusText.setText('前往事件点...');
-          this.pendingStatusLabel = point.label;
-          this.targetRotation = Phaser.Math.Angle.Wrap(-point.baseAngle);
-          this.logAction(`前往${point.label}`);
-        }
-      };
-      marker.on('pointerdown', handleClick);
-
-      const label = this.add
-        .text(0, 0, point.label, {
-          font: '14px Arial',
-          fill: '#ffffff',
-          stroke: '#000000',
-          strokeThickness: 3,
-        })
-        .setOrigin(0.5, 1)
-        .setDepth(0.6);
-
-      this.pointObjects.push({ point, marker, label });
-    });
 
     // 配置化物体（床、桌子、广告牌、火箭）
     this.worldObjects = [];
@@ -149,9 +118,7 @@ export default class HomeScene extends Phaser.Scene {
         .setOrigin(0.5, 1)
         .setScale(cfg.scale ?? 1)
         .setDepth(cfg.depth ?? 0.4);
-      if (cfg.interactive) {
-        img.setInteractive({ useHandCursor: true });
-      }
+      img.setInteractive({ useHandCursor: true });
       const label = this.add
         .text(0, 0, cfg.name ?? '', {
           font: '14px Arial',
@@ -163,19 +130,11 @@ export default class HomeScene extends Phaser.Scene {
         .setDepth((cfg.depth ?? 0.4) + 0.1);
 
       const handleObjClick = () => {
-        if (cfg.action === 'sleep') {
-          this.moveToAngle(cfg.angle, () => this.activities.startSleep());
-        } else if (cfg.action === 'eat') {
-          this.moveToAngle(cfg.angle, () => this.activities.startEatMenu());
-        } else if (cfg.action === 'launch') {
-          this.moveToAngle(cfg.angle, () => this.startRocketLaunch());
-        }
+        this.moveToAngle(cfg.angle, () => this.handleObjectAction(cfg));
       };
-      if (cfg.interactive) {
-        img.on('pointerdown', handleObjClick);
-        label.setInteractive({ useHandCursor: true });
-        label.on('pointerdown', handleObjClick);
-      }
+      img.on('pointerdown', handleObjClick);
+      label.setInteractive({ useHandCursor: true });
+      label.on('pointerdown', handleObjClick);
 
       const entry = { cfg, img, label };
       if (cfg.id === 'rocket') {
@@ -293,28 +252,29 @@ export default class HomeScene extends Phaser.Scene {
   }
 
   updateActionPointPositions() {
-    this.pointObjects.forEach(({ point, marker, label }) => {
-      const angle = point.baseAngle + this.planetAngle;
-      const pos = this.getPointOnPlanet(angle);
-      if (marker) {
-        marker.setPosition(pos.x, pos.y);
-      }
-      label.setPosition(pos.x, pos.y - 20);
-      label.setRotation(0);
-    });
-
     // 配置化物体的位置更新
-    this.worldObjects.forEach(({ cfg, img, label }) => {
+    const proximity = 90;
+    const playerPos = { x: this.player.x, y: this.player.y };
+    this.worldObjects.forEach((entry) => {
+      const { cfg, img, label } = entry;
       if (cfg.id === 'rocket' && this.isRocketLaunching) {
         return;
       }
       const angle = cfg.angle + this.planetAngle;
       const pos = this.getPointOnPlanet(angle);
       const yOffset = cfg.yOffset ?? 0;
-      img.setPosition(pos.x, pos.y + yOffset);
+      const objX = pos.x;
+      const objY = pos.y + yOffset;
+      img.setPosition(objX, objY);
       img.setRotation(angle);
-      label.setPosition(pos.x, pos.y + yOffset - (img.displayHeight || 40) - 8);
+      label.setPosition(objX, objY - (img.displayHeight || 40) - 8);
       label.setRotation(0);
+      const dx = playerPos.x - objX;
+      const dy = playerPos.y - objY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const visible = dist <= proximity;
+      label.setVisible(visible);
+      entry.pos = { x: objX, y: objY };
     });
   }
 
@@ -365,6 +325,20 @@ export default class HomeScene extends Phaser.Scene {
         });
       },
     });
+  }
+
+  handleObjectAction(cfg) {
+    if (cfg.action === 'sleep') {
+      this.logAction('触发睡觉');
+      this.activities.startSleep?.();
+    } else if (cfg.action === 'eat') {
+      this.logAction('触发吃饭');
+      this.activities.startEatMenu?.();
+    } else if (cfg.action === 'launch') {
+      this.startRocketLaunch();
+    } else {
+      this.logAction(`触发物体: ${cfg.name ?? cfg.id}`);
+    }
   }
 
   createButton(x, y, label, onDown, onUp) {
@@ -516,22 +490,38 @@ export default class HomeScene extends Phaser.Scene {
       this.setDefaultSunTimes();
     }
     const nowTs = this.debugOverrideTs ?? Date.now();
-    const isNight = nowTs < this.sunriseTimestamp || nowTs >= this.sunsetTimestamp;
-    const targetAlpha = isNight ? 0.75 : 0.12;
-    if (!this.dayNightOverlay) return;
-    if (force || Math.abs(this.dayNightOverlay.alpha - targetAlpha) > 0.01) {
-      this.dayNightOverlay.setAlpha(targetAlpha);
+    const sunriseM = this.getMinutesFromTs(this.sunriseTimestamp);
+    const sunsetM = this.getMinutesFromTs(this.sunsetTimestamp);
+    const nowM = this.getMinutesFromTs(nowTs);
+    // 视角靠近地平线，让晨昏颜色更明显
+    const palette = getSkyColor(nowM, sunriseM, sunsetM, 0.2);
+    const rgb = palette.skyColor.map((c) => Math.round(clamp01(c) * 255));
+    const colorHex = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+    const brightness = (rgb[0] + rgb[1] + rgb[2]) / (255 * 3);
+    // 昼夜明暗更明显
+    const targetAlpha = clamp01(0.6 - brightness * 0.4 + 0.15);
+    if (this.skyRect) {
+      this.skyRect.fillColor = colorHex;
+    }
+    if (this.dayNightOverlay) {
+      this.dayNightOverlay.fillColor = colorHex;
+      if (force || Math.abs(this.dayNightOverlay.alpha - targetAlpha) > 0.01) {
+        this.dayNightOverlay.setAlpha(targetAlpha);
+      }
     }
   }
 
   setDebugHour(hour) {
-    const clamped = Math.max(0, Math.min(23, Number(hour)));
+    const raw = Number(hour);
+    const clamped = Math.max(0, Math.min(23.999, isNaN(raw) ? 0 : raw));
+    const h = Math.floor(clamped);
+    const m = Math.round((clamped - h) * 60);
     const now = new Date();
-    now.setHours(clamped, 0, 0, 0);
+    now.setHours(h, m, 0, 0);
     this.debugOverrideTs = now.getTime();
     this.dayNightCheckAccumulator = 0;
     this.updateDayNight(true);
-    console.log(`调试时间设为 ${clamped}:00，ISO=${now.toISOString()}`);
+    console.log(`调试时间设为 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}，ISO=${now.toISOString()}`);
   }
 
   clearDebugTime() {
@@ -540,4 +530,92 @@ export default class HomeScene extends Phaser.Scene {
     this.updateDayNight(true);
     console.log('调试时间已清除，恢复实时昼夜');
   }
+
+  getMinutesFromTs(ts) {
+    const d = new Date(ts);
+    return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+  }
+}
+
+// ===== Sky Color Helpers (参考给定算法简化版) =====
+function clamp01(x) {
+  return Math.max(0, Math.min(1, x));
+}
+
+function clamp(x, min, max) {
+  return Math.max(min, Math.min(max, x));
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function lerpColor(c1, c2, t) {
+  return [
+    lerp(c1[0], c2[0], t),
+    lerp(c1[1], c2[1], t),
+    lerp(c1[2], c2[2], t),
+  ];
+}
+
+function addColor(a, b) {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+function mulColor(c, k) {
+  return [c[0] * k, c[1] * k, c[2] * k];
+}
+
+function smoothstep(edge0, edge1, x) {
+  const t = clamp01((x - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+
+function getSkyColor(time, sunrise, sunset, viewY) {
+  const twilight = 45; // 分钟
+  const dayLen = sunset - sunrise;
+  const solarNoon = (sunrise + sunset) * 0.5;
+
+  let x = (time - solarNoon) / (dayLen * 0.5);
+  x = clamp(x, -1, 1);
+  let sunHeight = Math.cos(x * Math.PI * 0.5);
+
+  if (time < sunrise) {
+    sunHeight *= smoothstep(sunrise - twilight, sunrise, time);
+  }
+  if (time > sunset) {
+    sunHeight *= 1 - smoothstep(sunset, sunset + twilight, time);
+  }
+
+  const dayW = smoothstep(0.1, 0.35, sunHeight);
+  let twilightW = (1 - dayW) * smoothstep(0.0, 0.25, sunHeight);
+  const nightW = 1 - smoothstep(0.0, 0.08, sunHeight);
+
+  const distToSunrise = Math.abs(time - sunrise);
+  const distToSunset = Math.abs(time - sunset);
+  const nearTwilight = 1 - smoothstep(0, twilight, Math.min(distToSunrise, distToSunset));
+  twilightW *= nearTwilight;
+
+  const zenith_day = [0.22, 0.45, 0.95];
+  const horizon_day = [0.7, 0.85, 1.0];
+  const zenith_twi = [0.35, 0.2, 0.55];
+  const horizon_twi = [1.0, 0.5, 0.15];
+  const zenith_night = [0.02, 0.03, 0.08];
+  const horizon_night = [0.03, 0.04, 0.1];
+
+  let zenith = [0, 0, 0];
+  let horizon = [0, 0, 0];
+  zenith = addColor(zenith, mulColor(zenith_day, dayW));
+  zenith = addColor(zenith, mulColor(zenith_twi, twilightW));
+  zenith = addColor(zenith, mulColor(zenith_night, nightW));
+  horizon = addColor(horizon, mulColor(horizon_day, dayW));
+  horizon = addColor(horizon, mulColor(horizon_twi, twilightW));
+  horizon = addColor(horizon, mulColor(horizon_night, nightW));
+
+  const k = Math.pow(clamp01(viewY), 0.6);
+  let sky = lerpColor(horizon, zenith, k);
+  const horizonFactor = Math.pow(1 - clamp01(viewY), 3);
+  const glow = mulColor(horizon_twi, twilightW * horizonFactor * 0.8);
+  sky = addColor(sky, glow);
+  return { skyColor: sky };
 }
