@@ -35,7 +35,6 @@ export default class HomeScene extends Phaser.Scene {
     this.planetAngle = 0;
     this.targetRotation = null;
     this.targetCallback = null;
-    this.pendingStatusLabel = null;
 
     // 天空底板与昼夜遮罩（底板直接用填充色，便于动态变色）
     this.skyRect = this.add
@@ -49,40 +48,19 @@ export default class HomeScene extends Phaser.Scene {
     this.dayNightCheckAccumulator = 0;
     this.debugOverrideTs = null;
     this.loadSunriseSunset();
-
-    this.currentCoordText = this.add.text(12, 68, '角度: 0°', {
-      font: '16px Arial',
-      fill: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 3,
-    });
-
     // 行星贴图
     this.planetImage = this.add
       .image(this.planetCenter.x, this.planetCenter.y, 'planet')
       .setDisplaySize(this.planetRadius * 2, this.planetRadius * 2)
       .setDepth(0);
 
-    // 顶部时间
-    this.timeText = this.add
-      .text(12, 12, this.getLocalTimeString(), {
-        font: '18px Arial',
-        fill: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 3,
-      })
-      .setDepth(10);
-    this.timeAccumulator = 0;
-
-    // 状态
-    this.statusText = this.add
-      .text(12, 40, '闲逛中...', {
-        font: '18px Arial',
-        fill: '#ffeb3b',
-        stroke: '#000000',
-        strokeThickness: 3,
-      })
-      .setDepth(10);
+    // 基础数值与状态条（能源 / 蓄水 / 精力）
+    this.maxStatValue = 100;
+    this.energyValue = 80;
+    this.waterValue = 30;
+    this.staminaValue = 70;
+    this.loadPersistedWater();
+    this.createStatBars();
 
     // 日志与滚动字幕
     this.logs = [];
@@ -109,6 +87,10 @@ export default class HomeScene extends Phaser.Scene {
 
     // 配置化物体（床、桌子、广告牌、火箭）
     this.worldObjects = [];
+    this.activeDescriptionEntry = null;
+    this.descriptionHideTimer = null;
+    this.waterExtractButton = null;
+    this.waterExtractButtonTargetEntry = null;
     this.rocketEntry = null;
     this.rocketBaseEntry = null;
     this.isRocketLaunching = false;
@@ -129,14 +111,44 @@ export default class HomeScene extends Phaser.Scene {
         .setOrigin(0.5, 1)
         .setDepth((cfg.depth ?? 0.4) + 0.1);
 
+      let descBg = null;
+      let descText = null;
+      if (cfg.description) {
+        const bubbleWidth = Math.min(this.viewWidth * 0.7, 320);
+        const bubblePadding = 10;
+        descBg = this.add
+          .rectangle(0, 0, bubbleWidth, 10, 0x000000, 0.65)
+          .setOrigin(0.5, 0)
+          .setStrokeStyle(2, 0xffffff, 0.9)
+          .setDepth((cfg.depth ?? 0.4) + 0.05)
+          .setVisible(false);
+        descText = this.add
+          .text(0, 0, cfg.description, {
+            font: '16px Arial',
+            fill: '#fffbe6',
+            stroke: '#000000',
+            strokeThickness: 3,
+            wordWrap: { width: bubbleWidth - bubblePadding * 2, useAdvancedWrap: true },
+            align: 'center',
+          })
+          .setOrigin(0.5, 0)
+          .setDepth((cfg.depth ?? 0.4) + 0.06)
+          .setVisible(false);
+        const finalHeight = descText.height + bubblePadding * 2;
+        descBg.setSize(bubbleWidth, finalHeight);
+      }
+
       const handleObjClick = () => {
-        this.moveToAngle(cfg.angle, () => this.handleObjectAction(cfg));
+        this.moveToAngle(cfg.angle, () => {
+          this.showObjectDescriptionByCfg(cfg);
+          this.handleObjectAction(cfg);
+        });
       };
       img.on('pointerdown', handleObjClick);
       label.setInteractive({ useHandCursor: true });
       label.on('pointerdown', handleObjClick);
 
-      const entry = { cfg, img, label };
+      const entry = { cfg, img, label, descBg, descText };
       if (cfg.id === 'rocket') {
         this.rocketEntry = entry;
       } else if (cfg.id === 'rocketBase') {
@@ -179,11 +191,6 @@ export default class HomeScene extends Phaser.Scene {
       if (Math.abs(diff) <= Math.abs(step)) {
         this.planetAngle = this.targetRotation;
         this.targetRotation = null;
-        if (this.pendingStatusLabel) {
-          this.statusText.setText(this.pendingStatusLabel);
-          this.logAction(this.pendingStatusLabel);
-          this.pendingStatusLabel = null;
-        }
         if (this.targetCallback) {
           const cb = this.targetCallback;
           this.targetCallback = null;
@@ -204,7 +211,10 @@ export default class HomeScene extends Phaser.Scene {
         currentMoveState = 'right';
       }
       if (moved) {
-        this.statusText.setText('闲逛中...');
+        if (this.activeDescriptionEntry) {
+          this.hideAllObjectDescriptions();
+        }
+        this.hideWaterExtractButton();
       }
     }
 
@@ -237,15 +247,6 @@ export default class HomeScene extends Phaser.Scene {
       this.dayNightCheckAccumulator = 0;
     }
 
-    const deg = Phaser.Math.Wrap(this.planetAngle * Phaser.Math.RAD_TO_DEG * -1, 0, 360);
-    this.currentCoordText.setText(`角度: ${deg.toFixed(1)}°`);
-
-    this.timeAccumulator += delta;
-    if (this.timeAccumulator >= 500) {
-      this.timeText.setText(this.getLocalTimeString());
-      this.timeAccumulator = 0;
-    }
-
     if (this.activities) {
       this.activities.update(time, delta);
     }
@@ -269,6 +270,16 @@ export default class HomeScene extends Phaser.Scene {
       img.setRotation(angle);
       label.setPosition(objX, objY - (img.displayHeight || 40) - 8);
       label.setRotation(0);
+      if (entry.descBg && entry.descText) {
+        const bubbleGap = 10;
+        const bubbleY = objY + bubbleGap;
+        entry.descBg.setPosition(objX, bubbleY);
+        entry.descBg.setRotation(0);
+        const bgHeight = entry.descBg.height ?? entry.descBg.displayHeight ?? 40;
+        const textY = bubbleY + (bgHeight - entry.descText.height) * 0.5;
+        entry.descText.setPosition(objX, textY);
+        entry.descText.setRotation(0);
+      }
       const dx = playerPos.x - objX;
       const dy = playerPos.y - objY;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -278,6 +289,86 @@ export default class HomeScene extends Phaser.Scene {
     });
   }
 
+  createStatBars() {
+    this.statBars = {};
+    this.statBarWidth = 140;
+    this.statBarHeight = 14;
+    const startX = 12;
+    const startY = 96;
+    const gapY = 26;
+
+    this.statBars.energy = this.createSingleStatBar(startX, startY + gapY * 0, '能源', 0xffc107);
+    this.statBars.water = this.createSingleStatBar(startX, startY + gapY * 1, '蓄水', 0x03a9f4);
+    this.statBars.stamina = this.createSingleStatBar(startX, startY + gapY * 2, '精力', 0x8bc34a);
+
+    this.updateStatBars();
+  }
+
+  createSingleStatBar(x, y, label, color) {
+    const labelText = this.add
+      .text(x, y - 8, label, {
+        font: '14px Arial',
+        fill: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 2,
+      })
+      .setOrigin(0, 1)
+      .setDepth(10);
+
+    const bg = this.add
+      .rectangle(x, y, this.statBarWidth, this.statBarHeight, 0x000000, 0.55)
+      .setOrigin(0, 0.5)
+      .setDepth(9);
+
+    const fill = this.add
+      .rectangle(x, y, this.statBarWidth, this.statBarHeight, color, 0.9)
+      .setOrigin(0, 0.5)
+      .setDepth(10);
+
+    return { labelText, bg, fill, color };
+  }
+
+  updateStatBars() {
+    if (!this.statBars) return;
+    const max = this.maxStatValue || 100;
+    const clamp01Local = (v) => Math.max(0, Math.min(1, v));
+
+    const apply = (bar, value) => {
+      if (!bar || !bar.fill) return;
+      const ratio = clamp01Local((value ?? 0) / max);
+      bar.fill.displayWidth = this.statBarWidth * ratio;
+    };
+
+    apply(this.statBars.energy, this.energyValue);
+    apply(this.statBars.water, this.waterValue);
+    apply(this.statBars.stamina, this.staminaValue);
+  }
+
+  loadPersistedWater() {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return;
+      const raw = window.localStorage.getItem('miaPlanet_water');
+      if (!raw) return;
+      const value = Number(raw);
+      if (Number.isNaN(value)) return;
+      const max = this.maxStatValue || 100;
+      this.waterValue = Math.max(0, Math.min(max, value));
+    } catch (e) {
+      console.warn('加载蓄水状态失败，将使用默认值', e);
+    }
+  }
+
+  savePersistedWater() {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return;
+      const max = this.maxStatValue || 100;
+      const value = Math.max(0, Math.min(max, this.waterValue ?? 0));
+      window.localStorage.setItem('miaPlanet_water', String(value));
+    } catch (e) {
+      console.warn('保存蓄水状态失败', e);
+    }
+  }
+
   getPointOnPlanet(angle) {
     const x = this.planetCenter.x + Math.sin(angle) * this.planetRadius;
     const y = this.planetCenter.y - Math.cos(angle) * this.planetRadius;
@@ -285,17 +376,101 @@ export default class HomeScene extends Phaser.Scene {
   }
 
   moveToAngle(targetAngle, callback) {
-    this.statusText.setText('前往事件点...');
-    this.pendingStatusLabel = null;
     this.targetRotation = Phaser.Math.Angle.Wrap(-targetAngle);
     this.targetCallback = callback || null;
+    this.hideAllObjectDescriptions();
+  }
+
+  showObjectDescriptionByCfg(cfg) {
+    const entry = this.worldObjects.find((e) => e.cfg === cfg);
+    if (!entry) return;
+    this.showObjectDescription(entry);
+  }
+
+  showObjectDescription(entry) {
+    if (!entry || !entry.descBg || !entry.descText) return;
+    this.hideAllObjectDescriptions();
+    entry.descBg.setVisible(true);
+    entry.descText.setVisible(true);
+    this.activeDescriptionEntry = entry;
+    if (this.descriptionHideTimer) {
+      this.descriptionHideTimer.remove(false);
+      this.descriptionHideTimer = null;
+    }
+    this.descriptionHideTimer = this.time.delayedCall(5000, () => {
+      if (this.activeDescriptionEntry === entry) {
+        this.hideAllObjectDescriptions();
+      }
+    });
+  }
+
+  hideAllObjectDescriptions() {
+    if (this.descriptionHideTimer) {
+      this.descriptionHideTimer.remove(false);
+      this.descriptionHideTimer = null;
+    }
+    this.worldObjects.forEach((entry) => {
+      if (entry.descBg) {
+        entry.descBg.setVisible(false);
+      }
+      if (entry.descText) {
+        entry.descText.setVisible(false);
+      }
+    });
+    this.activeDescriptionEntry = null;
+  }
+
+  showWaterExtractButtonByCfg(cfg) {
+    const entry = this.worldObjects.find((e) => e.cfg === cfg);
+    if (!entry) return;
+    this.showWaterExtractButton(entry);
+  }
+
+  showWaterExtractButton(entry) {
+    if (!entry || !entry.pos) return;
+
+    if (!this.waterExtractButton) {
+      const { bg, txt } = this.createButton(0, 0, '抽取水分', () => {
+        this.onWaterExtractButtonClick();
+      }, () => {});
+      bg.setDepth(18);
+      txt.setDepth(19);
+      this.waterExtractButton = { bg, txt };
+    }
+
+    const btn = this.waterExtractButton;
+    const imgHeight = entry.img?.displayHeight || 40;
+    const offsetY = imgHeight + 20;
+    const x = entry.pos.x;
+    const y = entry.pos.y - offsetY;
+
+    btn.bg.setPosition(x, y);
+    btn.txt.setPosition(x, y);
+    btn.bg.setVisible(true);
+    btn.txt.setVisible(true);
+
+    this.waterExtractButtonTargetEntry = entry;
+  }
+
+  hideWaterExtractButton() {
+    if (!this.waterExtractButton) return;
+    this.waterExtractButton.bg.setVisible(false);
+    this.waterExtractButton.txt.setVisible(false);
+    this.waterExtractButtonTargetEntry = null;
+  }
+
+  onWaterExtractButtonClick() {
+    this.waterValue = this.maxStatValue || 100;
+    this.updateStatBars();
+    this.savePersistedWater();
+    this.logAction('抽水站启动，蓄水值已填满');
+    this.hideWaterExtractButton();
   }
 
   startRocketLaunch() {
     if (!this.rocketEntry || this.isRocketLaunching) return;
     const { img, label, cfg } = this.rocketEntry;
     this.isRocketLaunching = true;
-    this.statusText.setText('火箭发射！');
     this.logAction('火箭发射');
     const cam = this.cameras.main;
     cam.shake(900, 0.01);
@@ -336,6 +511,9 @@ export default class HomeScene extends Phaser.Scene {
       this.activities.startEatMenu?.();
     } else if (cfg.action === 'launch') {
       this.startRocketLaunch();
+    } else if (cfg.id === 'waterExtracter') {
+      this.logAction('触发抽水站');
+      this.showWaterExtractButtonByCfg(cfg);
     } else {
       this.logAction(`触发物体: ${cfg.name ?? cfg.id}`);
     }
@@ -440,14 +618,6 @@ export default class HomeScene extends Phaser.Scene {
         duration: 150,
         ease: 'Quad.easeOut',
       });
-    });
-  }
-
-  getLocalTimeString() {
-    const now = new Date();
-    return now.toLocaleString(undefined, {
-      hour12: false,
-      timeZoneName: 'short',
     });
   }
 

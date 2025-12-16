@@ -233,11 +233,13 @@ function codeToText(code) {
 .info-overlay {
   position: fixed;
   top: 5%;
-  left: 6%;
+  right: 6%;
+  left: auto;
   display: flex;
   gap: 12px;
   z-index: 2;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .info-card {
