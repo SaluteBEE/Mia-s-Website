@@ -48,6 +48,7 @@ export default class HomeScene extends Phaser.Scene {
     this.dayNightCheckAccumulator = 0;
     this.debugOverrideTs = null;
     this.loadSunriseSunset();
+    this.initStarField();
     // 行星贴图
     this.planetImage = this.add
       .image(this.planetCenter.x, this.planetCenter.y, 'planet')
@@ -240,6 +241,10 @@ export default class HomeScene extends Phaser.Scene {
 
     this.updateActionPointPositions();
 
+    if (this.starGraphics && this.starParticles) {
+      this.updateStarField(delta);
+    }
+
     // 白天/黑夜遮罩，每 30 秒检查一次
     this.dayNightCheckAccumulator += delta;
     if (this.dayNightCheckAccumulator >= 30000) {
@@ -287,6 +292,121 @@ export default class HomeScene extends Phaser.Scene {
       label.setVisible(visible);
       entry.pos = { x: objX, y: objY };
     });
+  }
+
+  initStarField() {
+    const w = this.viewWidth;
+    const h = this.viewHeight;
+    this.starGraphics = this.add.graphics();
+    // 让星空处在天空矩形之上、昼夜遮罩之下
+    this.starGraphics.setDepth(-1.5);
+    this.starGraphics.setBlendMode(Phaser.BlendModes.ADD);
+
+    this.starParticles = [];
+    this.starMaxLinkDist = 150;
+    this.starMaxSpeed = 80; // 像素/秒
+    this.starJitter = 20;
+    this.starFriction = 0.96;
+
+    const particleCount = 100;
+    const colors = [0x00ffff, 0xff00ff, 0xffff00, 0x00ff00, 0xff0080];
+
+    for (let i = 0; i < particleCount; i++) {
+      this.starParticles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * this.starMaxSpeed,
+        vy: (Math.random() - 0.5) * this.starMaxSpeed,
+        size: Math.random() * 1.8 + 0.8,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        glow: Math.random() * 6 + 4,
+      });
+    }
+  }
+
+  updateStarField(delta) {
+    const g = this.starGraphics;
+    const particles = this.starParticles;
+    if (!g || !particles || !particles.length) return;
+
+    const dt = delta / 1000;
+    const w = this.viewWidth;
+    const h = this.viewHeight;
+    const maxDist = this.starMaxLinkDist;
+    const maxSpeed = this.starMaxSpeed;
+    const jitter = this.starJitter;
+    const friction = this.starFriction;
+
+    g.clear();
+
+    const pointer = this.input?.activePointer;
+    const mx = pointer ? pointer.x : w * 0.5;
+    const my = pointer ? pointer.y : h * 0.4;
+
+    // 更新与绘制星点（带辉光）
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+
+      // 运动积分
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      // 轻微随机扰动，让星空更有生命力
+      p.vx += (Math.random() - 0.5) * jitter * dt;
+      p.vy += (Math.random() - 0.5) * jitter * dt;
+
+      // 鼠标/触控点微弱斥力
+      const dxm = mx - p.x;
+      const dym = my - p.y;
+      const distm = Math.hypot(dxm, dym);
+      if (distm > 0 && distm < maxDist) {
+        const force = (maxDist - distm) / maxDist;
+        const k = 25;
+        p.vx -= (dxm / distm) * force * k * dt;
+        p.vy -= (dym / distm) * force * k * dt;
+      }
+
+      // 边界反弹
+      if (p.x < 0 || p.x > w) p.vx *= -1;
+      if (p.y < 0 || p.y > h) p.vy *= -1;
+
+      // 阻尼与速度上限
+      p.vx *= friction;
+      p.vy *= friction;
+      const speed = Math.hypot(p.vx, p.vy);
+      if (speed > maxSpeed) {
+        const s = maxSpeed / speed;
+        p.vx *= s;
+        p.vy *= s;
+      }
+
+      // 绘制柔和辉光
+      g.fillStyle(p.color, 0.16);
+      g.fillCircle(p.x, p.y, p.size + p.glow);
+      // 绘制核心高亮
+      g.fillStyle(p.color, 0.9);
+      g.fillCircle(p.x, p.y, p.size);
+    }
+
+    // 星点之间的连线
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      for (let j = i + 1; j < particles.length; j++) {
+        const o = particles[j];
+        const dx = o.x - p.x;
+        const dy = o.y - p.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < maxDist) {
+          const alpha = ((maxDist - dist) / maxDist) * 0.35;
+          if (alpha <= 0) continue;
+          g.lineStyle(0.7, 0x64c8ff, alpha);
+          g.beginPath();
+          g.moveTo(p.x, p.y);
+          g.lineTo(o.x, o.y);
+          g.strokePath();
+        }
+      }
+    }
   }
 
   createStatBars() {
@@ -379,6 +499,7 @@ export default class HomeScene extends Phaser.Scene {
     this.targetRotation = Phaser.Math.Angle.Wrap(-targetAngle);
     this.targetCallback = callback || null;
     this.hideAllObjectDescriptions();
+    this.hideWaterExtractButton();
   }
 
   showObjectDescriptionByCfg(cfg) {
