@@ -92,6 +92,9 @@ export default class HomeScene extends Phaser.Scene {
     this.descriptionHideTimer = null;
     this.waterExtractButton = null;
     this.waterExtractButtonTargetEntry = null;
+    this.musicPromptBg = null;
+    this.musicPromptText = null;
+    this.musicPromptButton = null;
     this.rocketEntry = null;
     this.rocketBaseEntry = null;
     this.isRocketLaunching = false;
@@ -216,6 +219,7 @@ export default class HomeScene extends Phaser.Scene {
           this.hideAllObjectDescriptions();
         }
         this.hideWaterExtractButton();
+        this.hideMusicPrompt();
       }
     }
 
@@ -309,17 +313,22 @@ export default class HomeScene extends Phaser.Scene {
     this.starFriction = 0.96;
 
     const particleCount = 100;
-    const colors = [0x00ffff, 0xff00ff, 0xffff00, 0x00ff00, 0xff0080];
+    // 稍微更鲜艳一些但仍偏真实的星色（冷白 + 微暖）
+    const colors = [0xffffff, 0xe5f0ff, 0xfff2de, 0xd8e4ff, 0xfaf3ff];
 
     for (let i = 0; i < particleCount; i++) {
+      const baseSize = Math.random() * 1.8 + 0.8;
       this.starParticles.push({
         x: Math.random() * w,
         y: Math.random() * h,
         vx: (Math.random() - 0.5) * this.starMaxSpeed,
         vy: (Math.random() - 0.5) * this.starMaxSpeed,
-        size: Math.random() * 1.8 + 0.8,
+        baseSize,
+        size: baseSize,
         color: colors[Math.floor(Math.random() * colors.length)],
         glow: Math.random() * 6 + 4,
+        twinklePhase: Math.random() * Math.PI * 2,
+        twinkleSpeed: 1 + Math.random() * 2, // 1~3 rad/s
       });
     }
   }
@@ -355,13 +364,14 @@ export default class HomeScene extends Phaser.Scene {
       p.vx += (Math.random() - 0.5) * jitter * dt;
       p.vy += (Math.random() - 0.5) * jitter * dt;
 
-      // 鼠标/触控点微弱斥力
+      // 鼠标/触控点斥力（加强）
       const dxm = mx - p.x;
       const dym = my - p.y;
       const distm = Math.hypot(dxm, dym);
       if (distm > 0 && distm < maxDist) {
         const force = (maxDist - distm) / maxDist;
-        const k = 25;
+        // 鼠标驱离力度更强一些
+        const k = 110;
         p.vx -= (dxm / distm) * force * k * dt;
         p.vy -= (dym / distm) * force * k * dt;
       }
@@ -379,13 +389,21 @@ export default class HomeScene extends Phaser.Scene {
         p.vx *= s;
         p.vy *= s;
       }
+      // 闪烁：基于每个星星自己的相位和速度
+      p.twinklePhase += (p.twinkleSpeed ?? 1.5) * dt;
+      const tw = 0.7 + 0.3 * Math.sin(p.twinklePhase);
+      const baseSize = p.baseSize || p.size;
+      const renderSize = baseSize * tw;
+      // 光晕进一步减淡：降低外圈透明度
+      const outerAlpha = 0.05 + 0.05 * tw;
+      const innerAlpha = 0.75 + 0.2 * tw;
 
       // 绘制柔和辉光
-      g.fillStyle(p.color, 0.16);
-      g.fillCircle(p.x, p.y, p.size + p.glow);
+      g.fillStyle(p.color, outerAlpha);
+      g.fillCircle(p.x, p.y, renderSize + p.glow);
       // 绘制核心高亮
-      g.fillStyle(p.color, 0.9);
-      g.fillCircle(p.x, p.y, p.size);
+      g.fillStyle(p.color, innerAlpha);
+      g.fillCircle(p.x, p.y, renderSize);
     }
 
     // 星点之间的连线
@@ -500,6 +518,7 @@ export default class HomeScene extends Phaser.Scene {
     this.targetCallback = callback || null;
     this.hideAllObjectDescriptions();
     this.hideWaterExtractButton();
+    this.hideMusicPrompt();
   }
 
   showObjectDescriptionByCfg(cfg) {
@@ -560,10 +579,22 @@ export default class HomeScene extends Phaser.Scene {
     }
 
     const btn = this.waterExtractButton;
-    const imgHeight = entry.img?.displayHeight || 40;
-    const offsetY = imgHeight + 20;
-    const x = entry.pos.x;
-    const y = entry.pos.y - offsetY;
+    let x = entry.pos.x;
+    let y = entry.pos.y;
+
+    if (entry.descBg) {
+      // descBg 原点在顶部，height 为整个气泡高度
+      const bgHeight = entry.descBg.height ?? entry.descBg.displayHeight ?? 40;
+      const bubbleBottomY = entry.descBg.y + bgHeight;
+      x = entry.descBg.x;
+      y = bubbleBottomY + 16; // 按钮放在文字提示正下方，略留间距
+    } else {
+      // 兜底：如果未来某个物体没有描述气泡，则放在物体上方
+      const imgHeight = entry.img?.displayHeight || 40;
+      const offsetY = imgHeight + 20;
+      x = entry.pos.x;
+      y = entry.pos.y - offsetY;
+    }
 
     btn.bg.setPosition(x, y);
     btn.txt.setPosition(x, y);
@@ -586,6 +617,106 @@ export default class HomeScene extends Phaser.Scene {
     this.savePersistedWater();
     this.logAction('抽水站启动，蓄水值已填满');
     this.hideWaterExtractButton();
+  }
+
+  showMusicPromptByCfg(cfg) {
+    const entry = this.worldObjects.find((e) => e.cfg === cfg);
+    if (!entry) return;
+    this.showMusicPrompt(entry);
+  }
+
+  showMusicPrompt(entry) {
+    if (!entry || !entry.pos) return;
+
+    const w = this.viewWidth;
+    const boxWidth = Math.min(w * 0.7, 420);
+    const boxHeight = 110;
+
+    if (!this.musicPromptBg) {
+      this.musicPromptBg = this.add
+        .rectangle(0, 0, boxWidth, boxHeight, 0x000000, 0.7)
+        .setStrokeStyle(2, 0xffffff, 0.6)
+        .setDepth(24);
+
+      this.musicPromptText = this.add
+        .text(0, 0, '在火星上就要听火星音乐！', {
+          font: '20px Arial',
+          fill: '#e5f0ff',
+          stroke: '#000000',
+          strokeThickness: 4,
+          align: 'center',
+          wordWrap: { width: boxWidth - 40, useAdvancedWrap: true },
+        })
+        .setOrigin(0.5)
+        .setDepth(25);
+
+      const { bg, txt } = this.createButton(0, 0, '打开网易云', () => {
+        this.openNetEaseMusic();
+      }, () => {});
+      bg.setDepth(25);
+      txt.setDepth(26);
+      this.musicPromptButton = { bg, txt };
+    }
+
+    let centerX = entry.pos.x;
+    let centerY = entry.pos.y;
+
+    if (entry.descBg) {
+      // descBg 原点在顶部，height 为整个气泡高度
+      const bgHeight = entry.descBg.height ?? entry.descBg.displayHeight ?? 40;
+      const bubbleBottomY = entry.descBg.y + bgHeight;
+      centerX = entry.descBg.x;
+      centerY = bubbleBottomY + 16 + boxHeight * 0.5;
+    } else {
+      // 兜底：如果未来某个物体没有描述气泡，则放在物体上方附近
+      const imgHeight = entry.img?.displayHeight || 40;
+      const offsetY = imgHeight + 20;
+      centerX = entry.pos.x;
+      centerY = entry.pos.y - offsetY;
+    }
+
+    this.musicPromptBg.setPosition(centerX, centerY);
+    this.musicPromptText.setPosition(centerX, centerY - 20);
+    if (this.musicPromptButton) {
+      this.musicPromptButton.bg.setPosition(centerX, centerY + 24);
+      this.musicPromptButton.txt.setPosition(centerX, centerY + 24);
+      this.musicPromptButton.bg.setVisible(true);
+      this.musicPromptButton.txt.setVisible(true);
+    }
+
+    this.musicPromptBg.setVisible(true);
+    this.musicPromptText.setVisible(true);
+  }
+
+  hideMusicPrompt() {
+    if (this.musicPromptBg) this.musicPromptBg.setVisible(false);
+    if (this.musicPromptText) this.musicPromptText.setVisible(false);
+    if (this.musicPromptButton) {
+      this.musicPromptButton.bg.setVisible(false);
+      this.musicPromptButton.txt.setVisible(false);
+    }
+  }
+
+  openNetEaseMusic() {
+    try {
+      const appUrl = 'orpheus://';
+      const webUrl = 'https://music.163.com/';
+      const now = Date.now();
+
+      // 尝试唤起客户端
+      window.location.href = appUrl;
+
+      // 简单的降级逻辑：如果 2 秒后仍停留在当前页面，则打开网页版
+      setTimeout(() => {
+        const elapsed = Date.now() - now;
+        // 大多数情况下，如果应用成功切走，这段代码不会真正执行；这里作为兜底
+        if (elapsed >= 1800) {
+          window.open(webUrl, '_blank');
+        }
+      }, 2000);
+    } catch (e) {
+      window.open('https://music.163.com/', '_blank');
+    }
   }
 
   startRocketLaunch() {
@@ -632,6 +763,9 @@ export default class HomeScene extends Phaser.Scene {
       this.activities.startEatMenu?.();
     } else if (cfg.action === 'launch') {
       this.startRocketLaunch();
+    } else if (cfg.id === 'musicPlayer') {
+      this.logAction('触发音乐播放终端');
+      this.showMusicPromptByCfg(cfg);
     } else if (cfg.id === 'waterExtracter') {
       this.logAction('触发抽水站');
       this.showWaterExtractButtonByCfg(cfg);
