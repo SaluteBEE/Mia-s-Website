@@ -16,22 +16,44 @@
     </div>
 
     <div class="overlay">
-      <div class="time-block">
-        <div class="current-time">{{ currentTime }}</div>
-        <label class="tz-select">
-          <span>时区</span>
-          <select v-model="timeZone">
-            <option value="Asia/Shanghai">北京时间</option>
-            <option value="Europe/Stockholm">哥德堡时间</option>
-          </select>
-        </label>
+      <div class="time-shell">
+        <div class="time-ring"></div>
+        <div class="time-core glass-card">
+          <div class="clock-row">
+            <div class="clock-label">LOCAL TIME</div>
+            <div class="tz-switch" role="radiogroup" aria-label="选择时间系">
+              <button
+                type="button"
+                class="tz-chip"
+                :class="{ active: timeMode === 'mars' }"
+                @click="setTimeMode('mars')"
+                aria-pressed="timeMode === 'mars'"
+              >
+                <span class="chip-dot mars"></span> Mars Time
+              </button>
+              <button
+                type="button"
+                class="tz-chip"
+                :class="{ active: timeMode === 'phobos' }"
+                @click="setTimeMode('phobos')"
+                aria-pressed="timeMode === 'phobos'"
+              >
+                <span class="chip-dot phobos"></span> Phobos Time
+              </button>
+              <div class="tz-indicator" :class="timeMode"></div>
+            </div>
+          </div>
+          <div class="clock-time">
+            <span v-for="(part, idx) in currentTimeParts" :key="`${idx}-${part}`">{{ part }}</span>
+          </div>
+          <div class="clock-sub">{{ weekdayText }}</div>
+        </div>
       </div>
       <form class="search-form" @submit.prevent="onSearch">
         <select v-model="engine">
-          <option value="https://www.google.com/search?q=">Google</option>
           <option value="https://www.baidu.com/s?wd=">百度</option>
+          <option value="https://www.google.com/search?q=">Google</option>
           <option value="https://www.bing.com/search?q=">Bing</option>
-          <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
         </select>
         <input v-model="query" placeholder="搜索..." />
         <button type="submit">搜索</button>
@@ -59,26 +81,32 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { createGame } from './game.js';
 
-const engine = ref('https://www.google.com/search?q=');
+const engine = ref('https://www.baidu.com/s?wd=');
 const query = ref('');
 let phaserGame = null;
 const dateText = ref('');
 const weekdayText = ref('');
-const timeZone = ref('Asia/Shanghai');
+const timeMode = ref('mars'); // mars=北京时间，phobos=哥德堡时间
+const timeZone = computed(() =>
+  timeMode.value === 'phobos' ? 'Europe/Stockholm' : 'Asia/Shanghai'
+);
 const currentTime = ref('');
 const debugHour = ref(12);
 const weatherText = ref('加载中...');
 const tempText = ref('--°C');
 let timer = null;
 let weatherTimer = null;
+const currentTimeParts = computed(() => currentTime.value.split(''));
 
 onMounted(() => {
   phaserGame = createGame('game-container');
+  hydrateTimeMode();
+  hydrateEngine();
   updateDate();
-  timer = setInterval(updateDate, 1000 * 30);
+  timer = setInterval(updateDate, 1000); // 秒级刷新，保证秒钟实时跳动
   fetchWeather();
   weatherTimer = setInterval(fetchWeather, 1000 * 60 * 10); // 10 分钟刷新一次
 });
@@ -99,6 +127,25 @@ onBeforeUnmount(() => {
 });
 
 watch(timeZone, updateDate);
+watch(engine, (val) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('miaPlanet_search_engine', val);
+    }
+  } catch (e) {
+    /* ignore */
+  }
+});
+
+watch(timeMode, (mode) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('miaPlanet_time_mode', mode);
+    }
+  } catch (e) {
+    /* ignore */
+  }
+});
 
 const onSearch = () => {
   const keyword = query.value.trim();
@@ -131,6 +178,35 @@ const formatDebugHour = (hourVal) => {
   const mm = String(m).padStart(2, '0');
   return `${hh}:${mm}`;
 };
+
+const setTimeMode = (mode) => {
+  timeMode.value = mode;
+  updateDate();
+};
+
+function hydrateEngine() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const saved = window.localStorage.getItem('miaPlanet_search_engine');
+    if (saved) {
+      engine.value = saved;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function hydrateTimeMode() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const saved = window.localStorage.getItem('miaPlanet_time_mode');
+    if (saved === 'mars' || saved === 'phobos') {
+      timeMode.value = saved;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+}
 
 function updateDate() {
   const now = new Date();
@@ -273,53 +349,138 @@ function codeToText(code) {
 .overlay {
   position: fixed;
   left: 50%;
-  top: 16%;
+  top: 7%;
   transform: translateX(-50%);
   z-index: 2;
-  width: min(90%, 640px);
+  width: min(88%, 660px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   align-items: center;
 }
 
-.time-block {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 10px 14px;
-  border-radius: 12px;
+.glass-card {
+  background: radial-gradient(circle at 20% 20%, rgba(110, 200, 255, 0.12), transparent 55%),
+    radial-gradient(circle at 80% 80%, rgba(140, 110, 255, 0.12), transparent 50%),
+    linear-gradient(160deg, rgba(12, 20, 40, 0.6), rgba(8, 12, 28, 0.5));
+  border: 1px solid rgba(76, 205, 255, 0.12);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.45),
+    0 0 14px rgba(76, 205, 255, 0.25),
+    inset 0 0 8px rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(12px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  border-radius: 16px;
 }
+
+  .time-shell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .time-ring {
+    position: absolute;
+    inset: -12px;
+    border-radius: 18px;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(100, 200, 255, 0.18), transparent 45%),
+      radial-gradient(circle at 80% 80%, rgba(138, 107, 255, 0.16), transparent 40%),
+      linear-gradient(120deg, rgba(100, 200, 255, 0.25), rgba(138, 107, 255, 0.16));
+    filter: blur(12px);
+    opacity: 0.75;
+    z-index: 0;
+  }
+
+.time-core {
+  position: relative;
+  z-index: 1;
+  padding: 14px 18px;
+  min-width: 320px;
+}
+
+  .clock-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .clock-label {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: #7dd7ff;
+    text-transform: uppercase;
+  }
+
+.clock-time {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-family: 'Share Tech Mono', 'Orbitron', 'SFMono-Regular', Consolas, monospace;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #e8f3ff;
+  text-shadow: 0 0 12px rgba(59, 170, 255, 0.5);
+}
+
+  .clock-time span {
+    display: inline-block;
+    min-width: 18px;
+    animation: flip 0.25s ease;
+  }
+
+  .clock-sub {
+    margin-top: 4px;
+    font-size: 13px;
+    color: #9eb8d6;
+  }
 
 .search-form {
   width: 100%;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: 14px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(12px);
+  background: radial-gradient(circle at 20% 20%, rgba(100, 200, 255, 0.1), transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(138, 107, 255, 0.1), transparent 45%),
+    linear-gradient(160deg, rgba(10, 18, 38, 0.72), rgba(6, 10, 24, 0.72));
+  border: 1px solid rgba(80, 150, 255, 0.16);
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.45),
+    0 0 18px rgba(64, 186, 255, 0.25),
+    inset 0 0 10px rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(14px);
 }
 
 select,
 input {
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(6, 10, 20, 0.8);
   color: #e8f3ff;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.45);
 }
 
 select {
-  min-width: 150px;
+  min-width: 160px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #cfe9ff 50%),
+    linear-gradient(135deg, #cfe9ff 50%, transparent 50%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2));
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px),
+    calc(100% - 28px) 50%;
+  background-repeat: no-repeat;
+  background-size: 6px 6px, 6px 6px, 1px 60%;
+  padding-right: 34px;
 }
 
 input {
@@ -327,41 +488,93 @@ input {
 }
 
 button {
-  padding: 10px 16px;
-  border-radius: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
   border: none;
-  background: #3baaff;
+  background: linear-gradient(135deg, #4dc9ff, #5c7dff);
   color: #0b1d36;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
+  box-shadow:
+    0 10px 20px rgba(0, 0, 0, 0.35),
+    0 0 12px rgba(100, 200, 255, 0.5);
 }
 
 button:hover {
-  background: #6cc1ff;
+  background: linear-gradient(135deg, #6addff, #7d8dff);
 }
 
-.current-time {
-  font-size: 32px;
+.tz-switch {
+  position: relative;
+  display: inline-flex;
+  gap: 0;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(100, 200, 255, 0.2);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.35),
+    inset 0 0 12px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.tz-chip {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #cfe9ff;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  color: #e8f3ff;
-  text-shadow: 0 0 12px rgba(59, 170, 255, 0.4);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.25s ease;
 }
 
-.tz-select {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 13px;
-  color: #e8f3ff;
+.tz-chip .chip-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 8px;
+  box-shadow: 0 0 10px currentColor;
+}
+.chip-dot.mars {
+  background: #4ad7ff;
+  color: #4ad7ff;
+}
+.chip-dot.phobos {
+  background: #a371ff;
+  color: #a371ff;
 }
 
-.tz-select select {
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
-  color: #e8f3ff;
+.tz-chip.active {
+  color: #0b1428;
+}
+
+.tz-indicator {
+  position: absolute;
+  z-index: 0;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: calc(50% - 6px);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #64c8ff, #8a6bff);
+  box-shadow:
+    0 8px 20px rgba(100, 200, 255, 0.4),
+    0 0 18px rgba(138, 107, 255, 0.4);
+  transition: transform 0.28s ease, background 0.28s ease;
+}
+.tz-indicator.mars {
+  transform: translateX(0%);
+}
+.tz-indicator.phobos {
+  transform: translateX(100%);
 }
 
 .debug-panel {
@@ -407,7 +620,18 @@ button:hover {
   cursor: pointer;
 }
 
-.ghost-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
+  .ghost-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  
+  @keyframes flip {
+    0% {
+      transform: translateY(6px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
 </style>

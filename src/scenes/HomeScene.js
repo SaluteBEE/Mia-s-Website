@@ -121,15 +121,15 @@ export default class HomeScene extends Phaser.Scene {
         const bubbleWidth = Math.min(this.viewWidth * 0.7, 320);
         const bubblePadding = 10;
         descBg = this.add
-          .rectangle(0, 0, bubbleWidth, 10, 0x000000, 0.65)
+          .rectangle(0, 0, bubbleWidth, 10, 0x0b162c, 0.8)
           .setOrigin(0.5, 0)
-          .setStrokeStyle(2, 0xffffff, 0.9)
+          .setStrokeStyle(2, 0x64c8ff, 0.9)
           .setDepth((cfg.depth ?? 0.4) + 0.05)
           .setVisible(false);
         descText = this.add
           .text(0, 0, cfg.description, {
             font: '16px Arial',
-            fill: '#fffbe6',
+            fill: '#e8f3ff',
             stroke: '#000000',
             strokeThickness: 3,
             wordWrap: { width: bubbleWidth - bubblePadding * 2, useAdvancedWrap: true },
@@ -570,9 +570,26 @@ export default class HomeScene extends Phaser.Scene {
     if (!entry || !entry.pos) return;
 
     if (!this.waterExtractButton) {
-      const { bg, txt } = this.createButton(0, 0, '抽取水分', () => {
-        this.onWaterExtractButtonClick();
-      }, () => {});
+      const { bg, txt } = this.createButton(
+        0,
+        0,
+        '抽取水分',
+        () => {
+          this.onWaterExtractButtonClick();
+        },
+        () => {},
+        {
+          fill: 0x0b162c,
+          fillAlpha: 0.85,
+          stroke: 0x64c8ff,
+          strokeAlpha: 0.9,
+          textColor: '#e8f3ff',
+          textShadowColor: '#64c8ff',
+          textShadowBlur: 12,
+          activeFill: 0x13335c,
+          activeFillAlpha: 0.95,
+        }
+      );
       bg.setDepth(18);
       txt.setDepth(19);
       this.waterExtractButton = { bg, txt };
@@ -774,32 +791,43 @@ export default class HomeScene extends Phaser.Scene {
     }
   }
 
-  createButton(x, y, label, onDown, onUp) {
+  createButton(x, y, label, onDown, onUp, style = {}) {
     const width = 120;
     const height = 50;
+    const fillColor = style.fill ?? 0x1a1a1a;
+    const fillAlpha = style.fillAlpha ?? 0.7;
+    const strokeColor = style.stroke ?? 0xffffff;
+    const strokeAlpha = style.strokeAlpha ?? 1;
+    const textColor = style.textColor ?? '#ffffff';
+    const textShadowColor = style.textShadowColor ?? '#000000';
+    const textShadowBlur = style.textShadowBlur ?? 0;
+
     const bg = this.add
-      .rectangle(x, y, width, height, 0x1a1a1a, 0.7)
-      .setStrokeStyle(2, 0xffffff)
+      .rectangle(x, y, width, height, fillColor, fillAlpha)
+      .setStrokeStyle(2, strokeColor, strokeAlpha)
       .setInteractive({ useHandCursor: true });
     const txt = this.add
       .text(x, y, label, {
         font: '18px Arial',
-        fill: '#ffffff',
-        stroke: '#000000',
+        fill: textColor,
+        stroke: textShadowColor,
         strokeThickness: 2,
       })
       .setOrigin(0.5);
+    if (textShadowBlur > 0 && txt.setShadow) {
+      txt.setShadow(0, 0, textShadowColor, textShadowBlur, true, true);
+    }
 
     bg.on('pointerdown', () => {
-      bg.setFillStyle(0x333333, 0.9);
+      bg.setFillStyle(style.activeFill ?? fillColor, (style.activeFillAlpha ?? fillAlpha) + 0.15);
       onDown();
     });
     bg.on('pointerup', () => {
-      bg.setFillStyle(0x1a1a1a, 0.7);
+      bg.setFillStyle(fillColor, fillAlpha);
       onUp();
     });
     bg.on('pointerout', () => {
-      bg.setFillStyle(0x1a1a1a, 0.7);
+      bg.setFillStyle(fillColor, fillAlpha);
       onUp();
     });
 
