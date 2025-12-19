@@ -71,7 +71,7 @@
     </div>
   </div>
 
-  <div v-if="showIntro" class="intro-screen">
+  <div v-if="showIntro" class="intro-screen" @click="handleIntroClick">
     <div class="intro-content">
       <div class="intro-title">For Mia</div>
       <div
@@ -82,6 +82,7 @@
       >
         {{ line }}
       </div>
+      <div class="intro-hint" v-if="introFinished">点击屏幕进入</div>
     </div>
   </div>
 </template>
@@ -116,6 +117,7 @@ const introLines = [
   '不过我走之前重新修缮了基地作为送给你的礼物。',
   '欢迎来到火星！一定要玩得开心！',
 ];
+const introFinished = ref(false);
 let introTimer = null;
 
 onMounted(() => {
@@ -226,6 +228,7 @@ const startIntroIfNeeded = () => {
     if (seen) return;
     showIntro.value = true;
     introVisibleLines.value = [];
+    introFinished.value = false;
     let idx = 0;
     const step = () => {
       if (idx < introLines.length) {
@@ -233,15 +236,34 @@ const startIntroIfNeeded = () => {
         idx += 1;
         introTimer = setTimeout(step, 1500);
       } else {
-        introTimer = setTimeout(() => {
-          showIntro.value = false;
-          window.localStorage.setItem('mia_intro_seen', '1');
-        }, 1600);
+        introFinished.value = true;
+        introTimer = null;
       }
     };
     step();
   } catch (e) {
     showIntro.value = false;
+  }
+};
+
+const handleIntroClick = () => {
+  if (!showIntro.value) return;
+  if (!introFinished.value) {
+    introVisibleLines.value = [...introLines];
+    introFinished.value = true;
+    if (introTimer) {
+      clearTimeout(introTimer);
+      introTimer = null;
+    }
+    return;
+  }
+  showIntro.value = false;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('mia_intro_seen', '1');
+    }
+  } catch (e) {
+    /* ignore */
   }
 };
 
@@ -558,6 +580,14 @@ function codeToText(code) {
   opacity: 0;
   animation: fadeInUp 0.6s ease forwards;
   text-shadow: 0 0 12px rgba(100, 200, 255, 0.5);
+}
+
+.intro-hint {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #9bc8ff;
+  opacity: 0.85;
+  letter-spacing: 0.08em;
 }
 
 @keyframes fadeInUp {

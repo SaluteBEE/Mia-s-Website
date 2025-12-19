@@ -1222,6 +1222,11 @@ export default class HomeScene extends Phaser.Scene {
       if (typeof window !== 'undefined' && window.dispatchEvent) {
         window.dispatchEvent(new CustomEvent('mia:debug-toggle', { detail: { toggle: true } }));
         window.dispatchEvent(new CustomEvent('mia:log-toggle', { detail: { toggle: true } }));
+        try {
+          window.localStorage?.removeItem('mia_intro_seen');
+        } catch (e) {
+          // ignore
+        }
       }
       this.showStats = !this.showStats;
       this.setStatsVisible(this.showStats);
