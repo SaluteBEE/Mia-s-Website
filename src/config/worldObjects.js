@@ -8,6 +8,7 @@ import musicPlayerPng from '../assets/musicPlayer.png';
 import solarPanelPng from '../assets/solarPanel.png';
 import waterExtracterPng from '../assets/waterExtracter.png';
 import towerPng from '../assets/tower.png';
+import robotPng from '../assets/robot.png';
 
 // 配置化的场景物体；按需在这里新增/调整。
 const worldObjects = [
@@ -155,6 +156,18 @@ const worldObjects = [
     scale: 0.55,
     yOffset: 12,
     depth: 0.5,
+    interactive: false,
+  },
+  {
+    id: 'robot',
+    name: '机器人',
+    description: '驻守基地的多功能机器人，负责巡检与维修。',
+    angle: -0.33,
+    textureKey: 'robot',
+    texture: robotPng,
+    scale: 0.45,
+    yOffset: 8,
+    depth: 0.48,
     interactive: false,
   },
 ];

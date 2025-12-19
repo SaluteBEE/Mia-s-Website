@@ -60,7 +60,7 @@
       </form>
     </div>
 
-    <div class="debug-panel">
+    <div class="debug-panel" v-show="showDebugPanel">
       <div class="debug-block">
         <label>
           调试时间（小时）
@@ -100,6 +100,7 @@ const tempText = ref('--°C');
 let timer = null;
 let weatherTimer = null;
 const currentTimeParts = computed(() => currentTime.value.split(''));
+const showDebugPanel = ref(false);
 
 onMounted(() => {
   phaserGame = createGame('game-container');
@@ -109,6 +110,8 @@ onMounted(() => {
   timer = setInterval(updateDate, 1000); // 秒级刷新，保证秒钟实时跳动
   fetchWeather();
   weatherTimer = setInterval(fetchWeather, 1000 * 60 * 10); // 10 分钟刷新一次
+
+  window.addEventListener('mia:debug-toggle', handleDebugToggle);
 });
 
 onBeforeUnmount(() => {
@@ -124,6 +127,7 @@ onBeforeUnmount(() => {
     clearInterval(weatherTimer);
     weatherTimer = null;
   }
+  window.removeEventListener('mia:debug-toggle', handleDebugToggle);
 });
 
 watch(timeZone, updateDate);
@@ -182,6 +186,15 @@ const formatDebugHour = (hourVal) => {
 const setTimeMode = (mode) => {
   timeMode.value = mode;
   updateDate();
+};
+
+const handleDebugToggle = (evt) => {
+  const detail = evt?.detail || {};
+  if (typeof detail.visible === 'boolean') {
+    showDebugPanel.value = detail.visible;
+  } else {
+    showDebugPanel.value = !showDebugPanel.value;
+  }
 };
 
 function hydrateEngine() {

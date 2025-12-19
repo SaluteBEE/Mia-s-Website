@@ -9,6 +9,7 @@ import walk3Png from '../assets/walk3.png';
 import walk4Png from '../assets/walk4.png';
 import walk5Png from '../assets/walk5.png';
 import walk6Png from '../assets/walk6.png';
+import robotDialog from '../config/robotDialog.js';
 
 export default class HomeScene extends Phaser.Scene {
   constructor() {
@@ -111,6 +112,14 @@ export default class HomeScene extends Phaser.Scene {
     this.musicPromptButton = null;
     this.rocketEntry = null;
     this.rocketBaseEntry = null;
+    this.robotEntry = null;
+    this.towerEntry = null;
+    this.towerClickCount = 0;
+    this.towerClickTimer = null;
+    this.robotDialogTimer = null;
+    this.robotDialogIndex = 0;
+    this.enableLogs = false; // 日志显示开关，默认隐藏
+    this.onLogToggle = (evt) => this.handleLogToggle(evt);
     this.isRocketLaunching = false;
     worldObjects.forEach((cfg) => {
       const img = this.add
@@ -167,8 +176,10 @@ export default class HomeScene extends Phaser.Scene {
         descBg.glow = glowRect;
       }
 
+      const approachOffset =
+        cfg.id === 'robot' ? 0.04 : 0; // 玩家到达机器人侧面，避免重叠
       const handleObjClick = () => {
-        this.moveToAngle(cfg.angle, () => {
+        this.moveToAngle(cfg.angle + approachOffset, () => {
           this.showObjectDescriptionByCfg(cfg);
           this.handleObjectAction(cfg);
         });
@@ -177,11 +188,22 @@ export default class HomeScene extends Phaser.Scene {
       label.setInteractive({ useHandCursor: true });
       label.on('pointerdown', handleObjClick);
 
-      const entry = { cfg, img, label, descBg, descText, descGlow: descBg?.glow };
+      const entry = { cfg, img, label, descBg, descText, descGlow: descBg?.glow, isHovering: false };
+      const setHover = (hovered) => {
+        entry.isHovering = hovered;
+      };
+      img.on('pointerover', () => setHover(true));
+      img.on('pointerout', () => setHover(false));
+      label.on('pointerover', () => setHover(true));
+      label.on('pointerout', () => setHover(false));
       if (cfg.id === 'rocket') {
         this.rocketEntry = entry;
       } else if (cfg.id === 'rocketBase') {
         this.rocketBaseEntry = entry;
+      } else if (cfg.id === 'robot') {
+        this.robotEntry = entry;
+      } else if (cfg.id === 'tower') {
+        this.towerEntry = entry;
       }
       this.worldObjects.push(entry);
     });
@@ -208,6 +230,16 @@ export default class HomeScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.activities?.destroy());
 
     this.logAction('进入家场景');
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('mia:log-toggle', this.onLogToggle);
+    }
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('mia:log-toggle', this.onLogToggle);
+      }
+    });
   }
 
   update(time, delta) {
@@ -326,10 +358,11 @@ export default class HomeScene extends Phaser.Scene {
       const dx = playerPos.x - objX;
       const dy = playerPos.y - objY;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const visible = dist <= proximity;
+      const visible = dist <= proximity || entry.isHovering;
       label.setVisible(visible);
       entry.pos = { x: objX, y: objY };
     });
+
   }
 
   initStarField() {
@@ -825,6 +858,12 @@ export default class HomeScene extends Phaser.Scene {
     } else if (cfg.id === 'waterExtracter') {
       this.logAction('触发抽水站');
       // 弹窗与按钮已移除，如需恢复交互可在此处添加
+    } else if (cfg.id === 'robot') {
+      this.logAction('与机器人对话');
+      this.showRobotDialog();
+    } else if (cfg.id === 'tower') {
+      this.logAction('触发瞭望塔');
+      this.handleTowerDebugToggle();
     } else {
       this.logAction(`触发物体: ${cfg.name ?? cfg.id}`);
     }
@@ -882,6 +921,9 @@ export default class HomeScene extends Phaser.Scene {
     const timestamp = new Date().toLocaleTimeString();
     const entry = `[${timestamp}] ${desc}`;
     this.logs.push(entry);
+    if (!this.enableLogs) {
+      return;
+    }
     console.log(entry);
     const txt = this.add
       .text(this.marqueeX, this.marqueeStartY, desc, {
@@ -1026,6 +1068,62 @@ export default class HomeScene extends Phaser.Scene {
   getMinutesFromTs(ts) {
     const d = new Date(ts);
     return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+  }
+
+  handleTowerDebugToggle() {
+    this.towerClickCount = (this.towerClickCount ?? 0) + 1;
+    if (this.towerClickTimer) {
+      this.towerClickTimer.remove(false);
+    }
+    this.towerClickTimer = this.time.delayedCall(1000, () => {
+      this.towerClickCount = 0;
+      this.towerClickTimer = null;
+    });
+    if (this.towerClickCount >= 3) {
+      this.towerClickCount = 0;
+      if (this.towerClickTimer) {
+        this.towerClickTimer.remove(false);
+        this.towerClickTimer = null;
+      }
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('mia:debug-toggle', { detail: { toggle: true } }));
+        window.dispatchEvent(new CustomEvent('mia:log-toggle', { detail: { toggle: true } }));
+      }
+    }
+  }
+
+  showRobotDialog() {
+    if (!this.robotEntry) return;
+    const text = robotDialog[this.robotDialogIndex % robotDialog.length] ?? '';
+    this.robotDialogIndex += 1;
+    const label = this.robotEntry.label;
+    if (label) {
+      label.setText(text);
+      label.setStyle({
+        font: '14px Arial',
+        fill: '#e8f3ff',
+        stroke: '#000000',
+        strokeThickness: 2,
+        wordWrap: { width: 220, useAdvancedWrap: true },
+        align: 'center',
+      });
+      label.setInteractive({ useHandCursor: true });
+      label.removeAllListeners('pointerdown');
+      label.on('pointerdown', () => this.showRobotDialog());
+    }
+
+    if (this.robotDialogTimer) {
+      this.robotDialogTimer.remove(false);
+    }
+    this.robotDialogTimer = this.time.delayedCall(5000, () => this.showRobotDialog());
+  }
+
+  handleLogToggle(event) {
+    if (event?.detail && typeof event.detail.visible === 'boolean') {
+      this.enableLogs = event.detail.visible;
+    } else {
+      this.enableLogs = !this.enableLogs;
+    }
   }
 
   createPlayerAnimations() {
