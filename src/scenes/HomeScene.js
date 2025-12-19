@@ -10,6 +10,8 @@ import walk4Png from '../assets/walk4.png';
 import walk5Png from '../assets/walk5.png';
 import walk6Png from '../assets/walk6.png';
 import robotDialog from '../config/robotDialog.js';
+import buttonOnPng from '../assets/buttonOn.png';
+import buttonDownPng from '../assets/buttonDown.png';
 
 export default class HomeScene extends Phaser.Scene {
   constructor() {
@@ -19,6 +21,8 @@ export default class HomeScene extends Phaser.Scene {
   preload() {
     // 玩家、行星、背景
     this.load.image(playerConfig.textureKey, playerConfig.texture);
+    this.load.image('waterBtnOn', buttonOnPng);
+    this.load.image('waterBtnDown', buttonDownPng);
     this.load.image('walk1', walk1Png);
     this.load.image('walk2', walk2Png);
     this.load.image('walk3', walk3Png);
@@ -73,6 +77,10 @@ export default class HomeScene extends Phaser.Scene {
     this.energyValue = 80;
     this.waterValue = 30;
     this.staminaValue = 70;
+    this.waterDrainPerMs = (this.maxStatValue || 100) / (2 * 60 * 60 * 1000); // 2 小时耗尽
+    this.lastWaterSaveTs = Date.now();
+    this.waterSaveAccumulator = 0;
+    this.showStats = false; // HUD 默认隐藏
     this.loadPersistedWater();
     this.createStatBars();
 
@@ -120,6 +128,7 @@ export default class HomeScene extends Phaser.Scene {
     this.robotDialogIndex = 0;
     this.enableLogs = false; // 日志显示开关，默认隐藏
     this.onLogToggle = (evt) => this.handleLogToggle(evt);
+    this.objectButtons = new Map(); // key: entry, value: sprite
     this.isRocketLaunching = false;
     worldObjects.forEach((cfg) => {
       const img = this.add
@@ -233,11 +242,13 @@ export default class HomeScene extends Phaser.Scene {
 
     if (typeof window !== 'undefined') {
       window.addEventListener('mia:log-toggle', this.onLogToggle);
+      window.addEventListener('beforeunload', this.savePersistedWater.bind(this));
     }
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener('mia:log-toggle', this.onLogToggle);
+        window.removeEventListener('beforeunload', this.savePersistedWater.bind(this));
       }
     });
   }
@@ -245,6 +256,14 @@ export default class HomeScene extends Phaser.Scene {
   update(time, delta) {
     const rotationSpeed = 0.0018 * delta;
     let currentMoveState = 'idle';
+    // 蓄水缓慢流失：2 小时耗尽，且定期保存
+    this.waterValue = Math.max(0, (this.waterValue ?? 0) - (this.waterDrainPerMs || 0) * delta);
+    this.waterSaveAccumulator += delta;
+    if (this.waterSaveAccumulator >= 30000) {
+      this.savePersistedWater();
+      this.waterSaveAccumulator = 0;
+    }
+    this.updateStatBars();
 
     if (this.targetRotation !== null) {
       const diff = Phaser.Math.Angle.Wrap(this.targetRotation - this.planetAngle);
@@ -361,6 +380,14 @@ export default class HomeScene extends Phaser.Scene {
       const visible = dist <= proximity || entry.isHovering;
       label.setVisible(visible);
       entry.pos = { x: objX, y: objY };
+
+      const btnCfg = entry.cfg.buttonConfig || entry.cfg.waterButton;
+      const btnSprite = this.objectButtons.get(entry);
+      if (btnCfg && btnSprite) {
+        const btnOffset = btnCfg.offsetY ?? 24;
+        btnSprite.setPosition(objX, objY + btnOffset);
+        btnSprite.setDepth((entry.cfg.depth ?? 0.4) + 0.2);
+      }
     });
 
   }
@@ -496,41 +523,72 @@ export default class HomeScene extends Phaser.Scene {
 
   createStatBars() {
     this.statBars = {};
-    this.statBarWidth = 140;
-    this.statBarHeight = 14;
-    const startX = 12;
-    const startY = 96;
-    const gapY = 26;
+    this.statBarWidth = 160;
+    this.statBarHeight = 12;
+    const panelX = 90;
+    const panelY = 90;
+    const panelWidth = 200;
+    const panelHeight = 120;
+    // 背景面板
+    this.statPanel = this.add
+      .rectangle(panelX, panelY, panelWidth, panelHeight, 0x0d1a2f, 0.6)
+      .setStrokeStyle(2, 0x64c8ff, 0.4)
+      .setDepth(10);
+    this.statPanelGlow = this.add
+      .rectangle(panelX, panelY, panelWidth * 1.05, panelHeight * 1.05, 0x64c8ff, 0.12)
+      .setDepth(9.5)
+      .setBlendMode(Phaser.BlendModes.ADD);
+
+    const startX = panelX - panelWidth * 0.5 + 14;
+    const startY = panelY - panelHeight * 0.5 + 20;
+    const gapY = 30;
 
     this.statBars.energy = this.createSingleStatBar(startX, startY + gapY * 0, '能源', 0xffc107);
     this.statBars.water = this.createSingleStatBar(startX, startY + gapY * 1, '蓄水', 0x03a9f4);
     this.statBars.stamina = this.createSingleStatBar(startX, startY + gapY * 2, '精力', 0x8bc34a);
 
+    this.setStatsVisible(this.showStats);
     this.updateStatBars();
   }
 
   createSingleStatBar(x, y, label, color) {
     const labelText = this.add
-      .text(x, y - 8, label, {
-        font: '14px Arial',
-        fill: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 2,
+      .text(x, y - 10, label, {
+        font: '13px Arial',
+        fill: '#e8f3ff',
       })
       .setOrigin(0, 1)
-      .setDepth(10);
+      .setDepth(11);
 
     const bg = this.add
-      .rectangle(x, y, this.statBarWidth, this.statBarHeight, 0x000000, 0.55)
+      .rectangle(x, y, this.statBarWidth, this.statBarHeight, 0x0a1326, 0.7)
       .setOrigin(0, 0.5)
-      .setDepth(9);
+      .setStrokeStyle(1, 0x64c8ff, 0.3)
+      .setDepth(10);
 
     const fill = this.add
       .rectangle(x, y, this.statBarWidth, this.statBarHeight, color, 0.9)
       .setOrigin(0, 0.5)
-      .setDepth(10);
+      .setDepth(11);
 
-    return { labelText, bg, fill, color };
+    const glow = this.add
+      .rectangle(x, y, this.statBarWidth, this.statBarHeight + 6, color, 0.14)
+      .setOrigin(0, 0.5)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(9.8);
+
+    return { labelText, bg, fill, glow, color };
+  }
+
+  setStatsVisible(visible) {
+    if (this.statPanel) this.statPanel.setVisible(visible);
+    if (this.statPanelGlow) this.statPanelGlow.setVisible(visible);
+    Object.values(this.statBars || {}).forEach((bar) => {
+      bar.labelText?.setVisible(visible);
+      bar.bg?.setVisible(visible);
+      bar.fill?.setVisible(visible);
+      bar.glow?.setVisible(visible);
+    });
   }
 
   updateStatBars() {
@@ -542,6 +600,9 @@ export default class HomeScene extends Phaser.Scene {
       if (!bar || !bar.fill) return;
       const ratio = clamp01Local((value ?? 0) / max);
       bar.fill.displayWidth = this.statBarWidth * ratio;
+      if (bar.glow) {
+        bar.glow.displayWidth = this.statBarWidth * ratio;
+      }
     };
 
     apply(this.statBars.energy, this.energyValue);
@@ -553,11 +614,23 @@ export default class HomeScene extends Phaser.Scene {
     try {
       if (typeof window === 'undefined' || !window.localStorage) return;
       const raw = window.localStorage.getItem('miaPlanet_water');
+      const tsRaw = window.localStorage.getItem('miaPlanet_water_ts');
       if (!raw) return;
       const value = Number(raw);
       if (Number.isNaN(value)) return;
       const max = this.maxStatValue || 100;
-      this.waterValue = Math.max(0, Math.min(max, value));
+      let newVal = Math.max(0, Math.min(max, value));
+      if (tsRaw) {
+        const lastTs = Number(tsRaw);
+        if (!Number.isNaN(lastTs)) {
+          const now = Date.now();
+          const elapsed = Math.max(0, now - lastTs);
+          const drained = (this.waterDrainPerMs || 0) * elapsed;
+          newVal = Math.max(0, Math.min(max, newVal - drained));
+        }
+      }
+      this.waterValue = newVal;
+      this.lastWaterSaveTs = Date.now();
     } catch (e) {
       console.warn('加载蓄水状态失败，将使用默认值', e);
     }
@@ -569,6 +642,7 @@ export default class HomeScene extends Phaser.Scene {
       const max = this.maxStatValue || 100;
       const value = Math.max(0, Math.min(max, this.waterValue ?? 0));
       window.localStorage.setItem('miaPlanet_water', String(value));
+      window.localStorage.setItem('miaPlanet_water_ts', String(Date.now()));
     } catch (e) {
       console.warn('保存蓄水状态失败', e);
     }
@@ -591,12 +665,18 @@ export default class HomeScene extends Phaser.Scene {
   showObjectDescriptionByCfg(cfg) {
     const entry = this.worldObjects.find((e) => e.cfg === cfg);
     if (!entry) return;
+    if (entry.descText && entry.cfg?.description) {
+      entry.descText.setText(entry.cfg.description);
+    }
     this.showObjectDescription(entry);
   }
 
   showObjectDescription(entry) {
     if (!entry || !entry.descBg || !entry.descText) return;
     this.hideAllObjectDescriptions();
+    if (entry.cfg.id === 'waterExtracter' && this.waterValue <= 0) {
+      entry.descText.setText('水槽已空');
+    }
     if (entry.descGlow) {
       entry.descGlow.setVisible(true);
     }
@@ -630,6 +710,7 @@ export default class HomeScene extends Phaser.Scene {
         entry.descText.setVisible(false);
       }
     });
+    this.hideObjectButtons();
     this.activeDescriptionEntry = null;
   }
 
@@ -852,12 +933,42 @@ export default class HomeScene extends Phaser.Scene {
       this.logAction('触发吃饭');
       this.activities.startEatMenu?.();
     } else if (cfg.action === 'launch') {
-      this.startRocketLaunch();
-    } else if (cfg.id === 'musicPlayer') {
-      this.logAction('触发音乐播放终端');
+      // 取消发射功能，仅记录
+      this.logAction('火箭暂不发射');
     } else if (cfg.id === 'waterExtracter') {
       this.logAction('触发抽水站');
-      // 弹窗与按钮已移除，如需恢复交互可在此处添加
+      const entry = this.worldObjects.find((e) => e.cfg === cfg);
+      if (entry) {
+        this.showObjectButton(entry, () => this.onWaterButtonClick(entry));
+      }
+    } else if (cfg.id === 'musicPlayer') {
+      this.logAction('触发音乐播放终端');
+      const entry = this.worldObjects.find((e) => e.cfg === cfg);
+      if (entry) {
+        this.showObjectButton(entry, () => {
+          entry.descText?.setText('火星曲库播放中，享受音乐吧！');
+          this.openNetEaseMusic();
+        });
+      }
+    } else if (cfg.id === 'billboard') {
+      const entry = this.worldObjects.find((e) => e.cfg === cfg);
+      if (entry) {
+        this.showObjectButton(entry, () => {
+          const url = entry.cfg.buttonConfig?.url;
+          if (url) window.open(url, '_blank');
+          entry.descText?.setText('打开最新任务公告...');
+        });
+      }
+    } else if (cfg.id === 'table') {
+      const entry = this.worldObjects.find((e) => e.cfg === cfg);
+      if (entry) {
+        this.showObjectButton(entry, () => {
+          entry.descText?.setText('正在打开影片，请稍候...');
+          if (typeof window !== 'undefined') {
+            window.open('https://vidhub4.cc/', '_blank');
+          }
+        });
+      }
     } else if (cfg.id === 'robot') {
       this.logAction('与机器人对话');
       this.showRobotDialog();
@@ -1089,6 +1200,8 @@ export default class HomeScene extends Phaser.Scene {
         window.dispatchEvent(new CustomEvent('mia:debug-toggle', { detail: { toggle: true } }));
         window.dispatchEvent(new CustomEvent('mia:log-toggle', { detail: { toggle: true } }));
       }
+      this.showStats = !this.showStats;
+      this.setStatsVisible(this.showStats);
     }
   }
 
@@ -1124,6 +1237,56 @@ export default class HomeScene extends Phaser.Scene {
     } else {
       this.enableLogs = !this.enableLogs;
     }
+  }
+
+  showObjectButton(entry, onClick) {
+    if (!entry || !entry.descText) return;
+    let sprite = this.objectButtons.get(entry);
+    if (!sprite) {
+      sprite = this.add
+        .sprite(entry.pos?.x || this.viewWidth / 2, entry.pos?.y || this.viewHeight / 2, 'waterBtnOn')
+        .setInteractive({ useHandCursor: true })
+        .setDepth((entry.cfg.depth ?? 0.4) + 0.2)
+        .setVisible(false);
+
+      sprite.on('pointerdown', () => {
+        sprite.setTexture('waterBtnDown');
+      });
+      sprite.on('pointerup', () => {
+        sprite.setTexture('waterBtnOn');
+        onClick?.();
+      });
+      sprite.on('pointerout', () => {
+        sprite.setTexture('waterBtnOn');
+      });
+      this.objectButtons.set(entry, sprite);
+    }
+
+    const cfg = entry.cfg.buttonConfig || entry.cfg.waterButton || {};
+    const btnOffset = cfg.offsetY ?? 24;
+    const x = entry.pos?.x || this.viewWidth / 2;
+    const y = entry.pos?.y + btnOffset || this.viewHeight / 2;
+    sprite.setPosition(x, y);
+    if (cfg.scale) {
+      sprite.setScale(cfg.scale);
+    }
+    sprite.setVisible(true);
+  }
+
+  hideObjectButtons() {
+    this.objectButtons.forEach((sprite) => {
+      sprite.setVisible(false);
+    });
+  }
+
+  onWaterButtonClick(entry) {
+    if (!entry || !entry.descText) return;
+    const bonus = 20;
+    const max = this.maxStatValue || 100;
+    this.waterValue = Math.min(max, (this.waterValue ?? 0) + bonus);
+    this.updateStatBars();
+    this.savePersistedWater();
+    entry.descText.setText('蓄水已补充，水量提升！');
   }
 
   createPlayerAnimations() {

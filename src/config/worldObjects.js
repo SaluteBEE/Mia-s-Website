@@ -15,7 +15,7 @@ const worldObjects = [
   {
     id: 'bed',
     name: '床',
-    description: '柔软的休息舱，短暂小憩即可恢复精力。',
+    description: '早睡早起才能每天都精神充沛。',
     angle: 0,
     textureKey: 'bed',
     texture: bedPng,
@@ -27,8 +27,8 @@ const worldObjects = [
   },
   {
     id: 'table',
-    name: '主机',
-    description: '主控制台，显示星球系统状态与通信信息。',
+    name: '娱乐终端',
+    description: '累了就看看电影吧！',
     angle: 0.15,
     textureKey: 'table',
     texture: tablePng,
@@ -36,11 +36,15 @@ const worldObjects = [
     yOffset: 6,
     depth: 0.45,
     interactive: false,
+    buttonConfig: {
+      offsetY: 120,
+      scale: 0.5,
+    },
   },
   {
     id: 'billboard',
-    name: '公告板',
-    description: '任务公告与探险计划在此更新，别错过重要情报。',
+    name: '任务记录板',
+    description: '每一天的快乐都值得被记录！',
     angle: -0.2,
     textureKey: 'billboard',
     texture: billboardPng,
@@ -48,6 +52,11 @@ const worldObjects = [
     yOffset: 10,
     depth: 0.5,
     interactive: false,
+    buttonConfig: {
+      offsetY: 120,
+      scale: 0.5,
+      url: 'https://miro.com/app/board/uXjVJ_fU0kk=/',
+    },
   },
   {
     id: 'rocketBase',
@@ -64,7 +73,7 @@ const worldObjects = [
   {
     id: 'rocket',
     name: '火箭',
-    description: '整装待发的运载火箭，随时可以启动新的星际旅程。',
+    description: '火箭仍在维修中，准备好后即可发射返回地球。',
     angle: -0.6,
     textureKey: 'rocket',
     texture: rocketPng,
@@ -89,7 +98,7 @@ const worldObjects = [
   {
     id: 'musicPlayer',
     name: '音乐播放终端',
-    description: '播发来自地球和火星的乐曲，驱散孤独与疲惫。',
+    description: '火星也有音乐！',
     angle: 0.3,
     textureKey: 'musicPlayer',
     texture: musicPlayerPng,
@@ -97,11 +106,15 @@ const worldObjects = [
     yOffset: 6,
     depth: 0.46,
     interactive: false,
+    buttonConfig: {
+      offsetY: 120,
+      scale: 0.5,
+    },
   },
   {
     id: 'solarPanel',
     name: '太阳能板',
-    description: '吸收星光转化能量，维持基地日常供电。',
+    description: 'Phobos基地的能源也来自火星的太阳能。',
     angle: 1.55,
     textureKey: 'solarPanel',
     texture: solarPanelPng,
@@ -113,7 +126,7 @@ const worldObjects = [
   {
     id: 'solarPanel',
     name: '太阳能板',
-    description: '吸收星光转化能量，维持基地日常供电。',
+    description: 'Phobos基地的能源也来自火星的太阳能。',
     angle: 2,
     textureKey: 'solarPanel',
     texture: solarPanelPng,
@@ -125,7 +138,7 @@ const worldObjects = [
     {
   id: 'solarPanel',
   name: '太阳能板',
-    description: '吸收星光转化能量，维持基地日常供电。',
+    description: 'Phobos基地的能源也来自火星的太阳能。',
   angle: 2.5,
   textureKey: 'solarPanel',
   texture: solarPanelPng,
@@ -137,7 +150,7 @@ const worldObjects = [
   {
     id: 'waterExtracter',
     name: '抽水站',
-    description: '从星球深处提取可饮用的水源，生命保障的关键设施。',
+    description: '别忘了给基地补充水分，当然更重要的是你也要多喝水！',
     angle: 0.7,
     textureKey: 'waterExtracter',
     texture: waterExtracterPng,
@@ -145,6 +158,14 @@ const worldObjects = [
     yOffset: 10,
     depth: 0.47,
     interactive: false,
+    waterButton: {
+      offsetY: 120,
+      scale: 0.5,
+    },
+    buttonConfig: {
+      offsetY: 120,
+      scale: 0.5,
+    },
   },
   {
     id: 'tower',
@@ -161,7 +182,7 @@ const worldObjects = [
   {
     id: 'robot',
     name: '机器人',
-    description: '驻守基地的多功能机器人，负责巡检与维修。',
+    description: 'DAGU-1 机器人助手，陪伴并协助探索任务。点击它可以加载新的对话。',
     angle: -0.33,
     textureKey: 'robot',
     texture: robotPng,
