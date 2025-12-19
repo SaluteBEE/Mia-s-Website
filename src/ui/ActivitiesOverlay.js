@@ -47,7 +47,8 @@ export default class ActivitiesOverlay {
   }
 
   startSleep() {
-    this.showMessage('准备睡觉...');
+    // 保留日志但不再弹窗
+    this.hide();
     this.scene.logAction?.('准备睡觉');
   }
 

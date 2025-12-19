@@ -14,6 +14,7 @@ const worldObjects = [
   {
     id: 'bed',
     name: '床',
+    description: '柔软的休息舱，短暂小憩即可恢复精力。',
     angle: 0,
     textureKey: 'bed',
     texture: bedPng,
@@ -26,6 +27,7 @@ const worldObjects = [
   {
     id: 'table',
     name: '主机',
+    description: '主控制台，显示星球系统状态与通信信息。',
     angle: 0.15,
     textureKey: 'table',
     texture: tablePng,
@@ -37,6 +39,7 @@ const worldObjects = [
   {
     id: 'billboard',
     name: '公告板',
+    description: '任务公告与探险计划在此更新，别错过重要情报。',
     angle: -0.2,
     textureKey: 'billboard',
     texture: billboardPng,
@@ -48,6 +51,7 @@ const worldObjects = [
   {
     id: 'rocketBase',
     name: '火箭底座',
+    description: '发射架底座，确保火箭垂直稳定并提供补给接口。',
     angle: -0.6,
     textureKey: 'rocketBase',
     texture: rocketBasePng,
@@ -59,6 +63,7 @@ const worldObjects = [
   {
     id: 'rocket',
     name: '火箭',
+    description: '整装待发的运载火箭，随时可以启动新的星际旅程。',
     angle: -0.6,
     textureKey: 'rocket',
     texture: rocketPng,
@@ -71,6 +76,7 @@ const worldObjects = [
   {
     id: 'kitchen',
     name: '厨房',
+    description: '营地厨房，补给与热食的来源，保持探索者的战斗力。',
     angle: 0.5,
     textureKey: 'kitchen',
     texture: kitchenPng,
@@ -82,6 +88,7 @@ const worldObjects = [
   {
     id: 'musicPlayer',
     name: '音乐播放终端',
+    description: '播发来自地球和火星的乐曲，驱散孤独与疲惫。',
     angle: 0.3,
     textureKey: 'musicPlayer',
     texture: musicPlayerPng,
@@ -93,6 +100,7 @@ const worldObjects = [
   {
     id: 'solarPanel',
     name: '太阳能板',
+    description: '吸收星光转化能量，维持基地日常供电。',
     angle: 1.55,
     textureKey: 'solarPanel',
     texture: solarPanelPng,
@@ -104,6 +112,7 @@ const worldObjects = [
   {
     id: 'solarPanel',
     name: '太阳能板',
+    description: '吸收星光转化能量，维持基地日常供电。',
     angle: 2,
     textureKey: 'solarPanel',
     texture: solarPanelPng,
@@ -113,11 +122,12 @@ const worldObjects = [
     interactive: false,
   },
     {
-    id: 'solarPanel',
-    name: '太阳能板',
-    angle: 2.5,
-    textureKey: 'solarPanel',
-    texture: solarPanelPng,
+  id: 'solarPanel',
+  name: '太阳能板',
+    description: '吸收星光转化能量，维持基地日常供电。',
+  angle: 2.5,
+  textureKey: 'solarPanel',
+  texture: solarPanelPng,
     scale: 0.5,
     yOffset: 4,
     depth: 0.44,
@@ -126,7 +136,7 @@ const worldObjects = [
   {
     id: 'waterExtracter',
     name: '抽水站',
-    description: '没有水的话这个星球的生存保障系统就无法生存。当然，勇敢的探险者，你也一样！',
+    description: '从星球深处提取可饮用的水源，生命保障的关键设施。',
     angle: 0.7,
     textureKey: 'waterExtracter',
     texture: waterExtracterPng,
@@ -138,6 +148,7 @@ const worldObjects = [
   {
     id: 'tower',
     name: '瞭望塔',
+    description: '全景观测塔，监视天气与潜在威胁，保持安全。',
     angle: 2.2,
     textureKey: 'tower',
     texture: towerPng,

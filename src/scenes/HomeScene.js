@@ -134,11 +134,19 @@ export default class HomeScene extends Phaser.Scene {
       if (cfg.description) {
         const bubbleWidth = Math.min(this.viewWidth * 0.7, 320);
         const bubblePadding = 10;
+        const descBaseDepth = 5; // 提升描述层级，避免被场景元素遮挡
+        const glowDepth = descBaseDepth;
+        const glowRect = this.add
+          .rectangle(0, 0, bubbleWidth * 1.08, 10, 0x64c8ff, 0.18)
+          .setOrigin(0.5, 0)
+          .setDepth(glowDepth)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setVisible(false);
         descBg = this.add
-          .rectangle(0, 0, bubbleWidth, 10, 0x0b162c, 0.8)
+          .rectangle(0, 0, bubbleWidth, 10, 0x0a1326, 0.82)
           .setOrigin(0.5, 0)
           .setStrokeStyle(2, 0x64c8ff, 0.9)
-          .setDepth((cfg.depth ?? 0.4) + 0.05)
+          .setDepth(descBaseDepth + 0.05)
           .setVisible(false);
         descText = this.add
           .text(0, 0, cfg.description, {
@@ -150,17 +158,18 @@ export default class HomeScene extends Phaser.Scene {
             align: 'center',
           })
           .setOrigin(0.5, 0)
-          .setDepth((cfg.depth ?? 0.4) + 0.06)
+          .setDepth(descBaseDepth + 0.06)
           .setVisible(false);
+        descText.setShadow(0, 0, '#64c8ff', 8, true, true);
         const finalHeight = descText.height + bubblePadding * 2;
         descBg.setSize(bubbleWidth, finalHeight);
+        glowRect.setSize(bubbleWidth * 1.08, finalHeight * 1.12);
+        descBg.glow = glowRect;
       }
 
       const handleObjClick = () => {
         this.moveToAngle(cfg.angle, () => {
-          if (cfg.id !== 'waterExtracter') {
-            this.showObjectDescriptionByCfg(cfg);
-          }
+          this.showObjectDescriptionByCfg(cfg);
           this.handleObjectAction(cfg);
         });
       };
@@ -168,7 +177,7 @@ export default class HomeScene extends Phaser.Scene {
       label.setInteractive({ useHandCursor: true });
       label.on('pointerdown', handleObjClick);
 
-      const entry = { cfg, img, label, descBg, descText };
+      const entry = { cfg, img, label, descBg, descText, descGlow: descBg?.glow };
       if (cfg.id === 'rocket') {
         this.rocketEntry = entry;
       } else if (cfg.id === 'rocketBase') {
@@ -305,6 +314,10 @@ export default class HomeScene extends Phaser.Scene {
         const bubbleY = objY + bubbleGap;
         entry.descBg.setPosition(objX, bubbleY);
         entry.descBg.setRotation(0);
+        if (entry.descGlow) {
+          entry.descGlow.setPosition(objX, bubbleY);
+          entry.descGlow.setRotation(0);
+        }
         const bgHeight = entry.descBg.height ?? entry.descBg.displayHeight ?? 40;
         const textY = bubbleY + (bgHeight - entry.descText.height) * 0.5;
         entry.descText.setPosition(objX, textY);
@@ -551,6 +564,9 @@ export default class HomeScene extends Phaser.Scene {
   showObjectDescription(entry) {
     if (!entry || !entry.descBg || !entry.descText) return;
     this.hideAllObjectDescriptions();
+    if (entry.descGlow) {
+      entry.descGlow.setVisible(true);
+    }
     entry.descBg.setVisible(true);
     entry.descText.setVisible(true);
     this.activeDescriptionEntry = entry;
@@ -573,6 +589,9 @@ export default class HomeScene extends Phaser.Scene {
     this.worldObjects.forEach((entry) => {
       if (entry.descBg) {
         entry.descBg.setVisible(false);
+      }
+      if (entry.descGlow) {
+        entry.descGlow.setVisible(false);
       }
       if (entry.descText) {
         entry.descText.setVisible(false);
@@ -803,7 +822,6 @@ export default class HomeScene extends Phaser.Scene {
       this.startRocketLaunch();
     } else if (cfg.id === 'musicPlayer') {
       this.logAction('触发音乐播放终端');
-      this.showMusicPromptByCfg(cfg);
     } else if (cfg.id === 'waterExtracter') {
       this.logAction('触发抽水站');
       // 弹窗与按钮已移除，如需恢复交互可在此处添加
