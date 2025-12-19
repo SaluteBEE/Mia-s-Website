@@ -2,19 +2,6 @@
   <div class="page">
     <div id="game-container"></div>
 
-    <div class="info-overlay">
-      <div class="info-card">
-        <div class="info-title">日历</div>
-        <div class="info-main">{{ dateText }}</div>
-        <div class="info-sub">{{ weekdayText }}</div>
-      </div>
-      <div class="info-card">
-        <div class="info-title">北京天气</div>
-        <div class="info-main">{{ weatherText }}</div>
-        <div class="info-sub">{{ tempText }}</div>
-      </div>
-    </div>
-
     <div class="overlay">
       <div class="time-shell">
         <div class="time-ring"></div>
@@ -29,7 +16,7 @@
                 @click="setTimeMode('mars')"
                 aria-pressed="timeMode === 'mars'"
               >
-                <span class="chip-dot mars"></span> Mars Time
+                <span class="chip-dot mars"></span> Mars
               </button>
               <button
                 type="button"
@@ -38,7 +25,7 @@
                 @click="setTimeMode('phobos')"
                 aria-pressed="timeMode === 'phobos'"
               >
-                <span class="chip-dot phobos"></span> Phobos Time
+                <span class="chip-dot phobos"></span> Phobos
               </button>
               <div class="tz-indicator" :class="timeMode"></div>
             </div>
@@ -46,7 +33,12 @@
           <div class="clock-time">
             <span v-for="(part, idx) in currentTimeParts" :key="`${idx}-${part}`">{{ part }}</span>
           </div>
-          <div class="clock-sub">{{ weekdayText }}</div>
+          <div class="clock-sub">
+            <div class="time-meta">
+              <span class="meta-date">{{ dateText }}</span>
+              <span class="meta-weather">{{ weatherCity }} · {{ weatherText }} · {{ tempText }}</span>
+            </div>
+          </div>
         </div>
       </div>
       <form class="search-form" @submit.prevent="onSearch">
@@ -97,6 +89,7 @@ const currentTime = ref('');
 const debugHour = ref(12);
 const weatherText = ref('加载中...');
 const tempText = ref('--°C');
+const weatherCity = ref('北京天气');
 let timer = null;
 let weatherTimer = null;
 const currentTimeParts = computed(() => currentTime.value.split(''));
@@ -186,6 +179,7 @@ const formatDebugHour = (hourVal) => {
 const setTimeMode = (mode) => {
   timeMode.value = mode;
   updateDate();
+  fetchWeather();
 };
 
 const handleDebugToggle = (evt) => {
@@ -248,8 +242,12 @@ function updateDate() {
 }
 
 async function fetchWeather() {
-  const url =
-    'https://api.open-meteo.com/v1/forecast?latitude=39.9042&longitude=116.4074&current=temperature_2m,weather_code,wind_speed_10m';
+  const mode = timeMode.value === 'phobos' ? 'phobos' : 'mars';
+  const cfg = mode === 'phobos'
+    ? { city: '哥德堡天气', latitude: 57.7089, longitude: 11.9746 }
+    : { city: '北京天气', latitude: 39.9042, longitude: 116.4074 };
+  weatherCity.value = cfg.city;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${cfg.latitude}&longitude=${cfg.longitude}&current=temperature_2m,weather_code,wind_speed_10m`;
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error('network');
@@ -444,11 +442,28 @@ function codeToText(code) {
     animation: flip 0.25s ease;
   }
 
-  .clock-sub {
-    margin-top: 4px;
-    font-size: 13px;
-    color: #9eb8d6;
-  }
+.clock-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #9eb8d6;
+}
+
+.time-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #cfe1ff;
+  opacity: 0.9;
+}
+
+.time-meta .meta-date {
+  font-weight: 700;
+}
+
+.time-meta .meta-weather {
+  color: #a8c7ff;
+}
 
 .search-form {
   width: 100%;
@@ -536,7 +551,8 @@ button:hover {
   z-index: 1;
   flex: 1;
   min-width: 0;
-  padding: 10px 16px;
+  padding: 10px 14px;
+  white-space: nowrap;
   border-radius: 10px;
   border: none;
   background: transparent;
