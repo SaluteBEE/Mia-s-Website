@@ -3,6 +3,12 @@ import ActivitiesOverlay from '../ui/ActivitiesOverlay.js';
 import worldObjects from '../config/worldObjects.js';
 import playerConfig from '../config/playerConfig.js';
 import planetPng from '../assets/planet.png';
+import walk1Png from '../assets/walk1.png';
+import walk2Png from '../assets/walk2.png';
+import walk3Png from '../assets/walk3.png';
+import walk4Png from '../assets/walk4.png';
+import walk5Png from '../assets/walk5.png';
+import walk6Png from '../assets/walk6.png';
 
 export default class HomeScene extends Phaser.Scene {
   constructor() {
@@ -12,6 +18,12 @@ export default class HomeScene extends Phaser.Scene {
   preload() {
     // 玩家、行星、背景
     this.load.image(playerConfig.textureKey, playerConfig.texture);
+    this.load.image('walk1', walk1Png);
+    this.load.image('walk2', walk2Png);
+    this.load.image('walk3', walk3Png);
+    this.load.image('walk4', walk4Png);
+    this.load.image('walk5', walk5Png);
+    this.load.image('walk6', walk6Png);
     this.load.image('planet', planetPng);
     this.load.image('homeBg', 'https://labs.phaser.io/assets/skies/deepblue.png');
 
@@ -80,6 +92,8 @@ export default class HomeScene extends Phaser.Scene {
     this.player.setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
     this.player.setDepth(playerConfig.depth ?? 1);
+    this.createPlayerAnimations();
+    this.updatePlayerVisual('idle');
 
     this.cursors = this.input.keyboard.createCursorKeys();
 
@@ -144,7 +158,9 @@ export default class HomeScene extends Phaser.Scene {
 
       const handleObjClick = () => {
         this.moveToAngle(cfg.angle, () => {
-          this.showObjectDescriptionByCfg(cfg);
+          if (cfg.id !== 'waterExtracter') {
+            this.showObjectDescriptionByCfg(cfg);
+          }
           this.handleObjectAction(cfg);
         });
       };
@@ -192,9 +208,14 @@ export default class HomeScene extends Phaser.Scene {
     if (this.targetRotation !== null) {
       const diff = Phaser.Math.Angle.Wrap(this.targetRotation - this.planetAngle);
       const step = Math.sign(diff) * rotationSpeed;
+      // 自动旋转时也切换到对应方向的行走动画
+      if (diff !== 0) {
+        currentMoveState = diff > 0 ? 'left' : 'right';
+      }
       if (Math.abs(diff) <= Math.abs(step)) {
         this.planetAngle = this.targetRotation;
         this.targetRotation = null;
+        currentMoveState = 'idle';
         if (this.targetCallback) {
           const cb = this.targetCallback;
           this.targetCallback = null;
@@ -232,12 +253,12 @@ export default class HomeScene extends Phaser.Scene {
         this.logAction('停止移动');
       }
       this.moveState = currentMoveState;
+      this.updatePlayerVisual(currentMoveState);
     }
 
     const surfaceTopY = this.getPointOnPlanet(0).y;
     const playerYOffset = playerConfig.yOffset ?? -8;
     this.player.setPosition(this.viewWidth / 2, surfaceTopY + playerYOffset);
-    this.player.flipX = false;
 
     if (this.planetImage) {
       this.planetImage.setRotation(this.planetAngle);
@@ -785,7 +806,7 @@ export default class HomeScene extends Phaser.Scene {
       this.showMusicPromptByCfg(cfg);
     } else if (cfg.id === 'waterExtracter') {
       this.logAction('触发抽水站');
-      this.showWaterExtractButtonByCfg(cfg);
+      // 弹窗与按钮已移除，如需恢复交互可在此处添加
     } else {
       this.logAction(`触发物体: ${cfg.name ?? cfg.id}`);
     }
@@ -987,6 +1008,30 @@ export default class HomeScene extends Phaser.Scene {
   getMinutesFromTs(ts) {
     const d = new Date(ts);
     return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+  }
+
+  createPlayerAnimations() {
+    if (this.anims.exists('player-walk')) return;
+    this.anims.create({
+      key: 'player-walk',
+      frames: ['walk1', 'walk2', 'walk3', 'walk4', 'walk5', 'walk6'].map((key) => ({ key })),
+      frameRate: 12,
+      repeat: -1,
+    });
+  }
+
+  updatePlayerVisual(state) {
+    if (!this.player) return;
+    if (state === 'left') {
+      this.player.flipX = true;
+      this.player.anims.play('player-walk', true);
+    } else if (state === 'right') {
+      this.player.flipX = false;
+      this.player.anims.play('player-walk', true);
+    } else {
+      this.player.anims.stop();
+      this.player.setTexture(playerConfig.textureKey);
+    }
   }
 }
 
