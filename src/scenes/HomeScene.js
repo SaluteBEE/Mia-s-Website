@@ -12,6 +12,7 @@ import walk6Png from '../assets/walk6.png';
 import robotDialog from '../config/robotDialog.js';
 import buttonOnPng from '../assets/buttonOn.png';
 import buttonDownPng from '../assets/buttonDown.png';
+import arrowPng from '../assets/arrow.png';
 
 export default class HomeScene extends Phaser.Scene {
   constructor() {
@@ -30,6 +31,7 @@ export default class HomeScene extends Phaser.Scene {
     this.load.image('walk5', walk5Png);
     this.load.image('walk6', walk6Png);
     this.load.image('planet', planetPng);
+    this.load.image('arrow', arrowPng);
     this.load.image('homeBg', 'https://labs.phaser.io/assets/skies/deepblue.png');
 
     // 配置化物体纹理
@@ -223,12 +225,12 @@ export default class HomeScene extends Phaser.Scene {
     this.leftButtonDown = false;
     this.rightButtonDown = false;
     const buttonY = h - 70;
-    this.createButton(w * 0.3, buttonY, '< 左', () => {
+    this.createArrowButton(w * 0.3, buttonY, 'left', () => {
       this.leftButtonDown = true;
     }, () => {
       this.leftButtonDown = false;
     });
-    this.createButton(w * 0.7, buttonY, '右 >', () => {
+    this.createArrowButton(w * 0.7, buttonY, 'right', () => {
       this.rightButtonDown = true;
     }, () => {
       this.rightButtonDown = false;
@@ -1026,6 +1028,27 @@ export default class HomeScene extends Phaser.Scene {
     txt.on('pointerout', () => bg.emit('pointerout'));
 
     return { bg, txt };
+  }
+
+  createArrowButton(x, y, direction, onDown, onUp) {
+    const sprite = this.add
+      .sprite(x, y, 'arrow')
+      .setScale(0.9)
+      .setInteractive({ useHandCursor: true });
+    sprite.setFlipX(direction === 'left');
+    sprite.on('pointerdown', () => {
+      sprite.setTint(0xb0d4ff);
+      onDown?.();
+    });
+    sprite.on('pointerup', () => {
+      sprite.clearTint();
+      onUp?.();
+    });
+    sprite.on('pointerout', () => {
+      sprite.clearTint();
+      onUp?.();
+    });
+    return sprite;
   }
 
   logAction(desc) {

@@ -70,6 +70,20 @@
       </div>
     </div>
   </div>
+
+  <div v-if="showIntro" class="intro-screen">
+    <div class="intro-content">
+      <div class="intro-title">For Mia</div>
+      <div
+        v-for="(line, idx) in introVisibleLines"
+        :key="idx"
+        class="intro-line"
+        :style="{ animationDelay: `${idx * 0.1}s` }"
+      >
+        {{ line }}
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -94,6 +108,15 @@ let timer = null;
 let weatherTimer = null;
 const currentTimeParts = computed(() => currentTime.value.split(''));
 const showDebugPanel = ref(false);
+const showIntro = ref(false);
+const introVisibleLines = ref([]);
+const introLines = [
+  '探索者 Mia 生日快乐！',
+  '我要去 Phobos 上进行空间跃迁器的研发啦。',
+  '不过我走之前重新修缮了基地作为送给你的礼物。',
+  '欢迎来到火星！一定要玩得开心！',
+];
+let introTimer = null;
 
 onMounted(() => {
   phaserGame = createGame('game-container');
@@ -105,6 +128,7 @@ onMounted(() => {
   weatherTimer = setInterval(fetchWeather, 1000 * 60 * 10); // 10 分钟刷新一次
 
   window.addEventListener('mia:debug-toggle', handleDebugToggle);
+  startIntroIfNeeded();
 });
 
 onBeforeUnmount(() => {
@@ -121,6 +145,10 @@ onBeforeUnmount(() => {
     weatherTimer = null;
   }
   window.removeEventListener('mia:debug-toggle', handleDebugToggle);
+  if (introTimer) {
+    clearTimeout(introTimer);
+    introTimer = null;
+  }
 });
 
 watch(timeZone, updateDate);
@@ -188,6 +216,32 @@ const handleDebugToggle = (evt) => {
     showDebugPanel.value = detail.visible;
   } else {
     showDebugPanel.value = !showDebugPanel.value;
+  }
+};
+
+const startIntroIfNeeded = () => {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const seen = window.localStorage.getItem('mia_intro_seen');
+    if (seen) return;
+    showIntro.value = true;
+    introVisibleLines.value = [];
+    let idx = 0;
+    const step = () => {
+      if (idx < introLines.length) {
+        introVisibleLines.value = [...introVisibleLines.value, introLines[idx]];
+        idx += 1;
+        introTimer = setTimeout(step, 1500);
+      } else {
+        introTimer = setTimeout(() => {
+          showIntro.value = false;
+          window.localStorage.setItem('mia_intro_seen', '1');
+        }, 1600);
+      }
+    };
+    step();
+  } catch (e) {
+    showIntro.value = false;
   }
 };
 
@@ -463,6 +517,58 @@ function codeToText(code) {
 
 .time-meta .meta-weather {
   color: #a8c7ff;
+}
+
+.intro-screen {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 20% 20%, rgba(100, 200, 255, 0.18), transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(138, 107, 255, 0.15), transparent 40%),
+    linear-gradient(135deg, #0a1020, #0c1c38);
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.intro-content {
+  padding: 32px 40px;
+  border-radius: 18px;
+  background: rgba(12, 20, 40, 0.8);
+  border: 1px solid rgba(120, 160, 255, 0.35);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.45),
+    0 0 32px rgba(100, 200, 255, 0.25);
+  max-width: 520px;
+  text-align: center;
+}
+
+.intro-title {
+  font-size: 18px;
+  letter-spacing: 0.2em;
+  color: #7dd7ff;
+  margin-bottom: 16px;
+}
+
+.intro-line {
+  font-size: 18px;
+  color: #e8f3ff;
+  margin: 8px 0;
+  opacity: 0;
+  animation: fadeInUp 0.6s ease forwards;
+  text-shadow: 0 0 12px rgba(100, 200, 255, 0.5);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .search-form {
