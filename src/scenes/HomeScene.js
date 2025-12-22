@@ -66,9 +66,16 @@ export default class HomeScene extends Phaser.Scene {
       .setDepth(-1);
     this.sunriseTimestamp = null;
     this.sunsetTimestamp = null;
+    this.sunLat = 39.9042;
+    this.sunLon = 116.4074;
+    this.sunTimeZone = 'Asia/Shanghai';
     this.dayNightCheckAccumulator = 0;
     this.debugOverrideTs = null;
     this.loadSunriseSunset();
+    if (typeof window !== 'undefined') {
+      this.onTimezoneChange = (evt) => this.handleTimezoneChange(evt);
+      window.addEventListener('mia:timezone-change', this.onTimezoneChange);
+    }
     this.initStarField();
     // 行星贴图
     this.planetImage = this.add
@@ -251,6 +258,11 @@ export default class HomeScene extends Phaser.Scene {
     // 弹窗/活动
     this.activities = new ActivitiesOverlay(this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.activities?.destroy());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (typeof window !== 'undefined' && this.onTimezoneChange) {
+        window.removeEventListener('mia:timezone-change', this.onTimezoneChange);
+      }
+    });
 
     this.logAction('进入家场景');
 
@@ -1147,8 +1159,9 @@ export default class HomeScene extends Phaser.Scene {
   }
 
   async loadSunriseSunset() {
-    const url =
-      'https://api.open-meteo.com/v1/forecast?latitude=39.9042&longitude=116.4074&daily=sunrise,sunset&timezone=Asia/Shanghai';
+    const lat = this.sunLat ?? 39.9042;
+    const lon = this.sunLon ?? 116.4074;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&timezone=auto`;
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error('network');
@@ -1184,7 +1197,7 @@ export default class HomeScene extends Phaser.Scene {
     if (!this.sunriseTimestamp || !this.sunsetTimestamp) {
       this.setDefaultSunTimes();
     }
-    const nowTs = this.debugOverrideTs ?? Date.now();
+    const nowTs = this.debugOverrideTs ?? this.getNowTsInTz(this.sunTimeZone);
     const sunriseM = this.getMinutesFromTs(this.sunriseTimestamp);
     const sunsetM = this.getMinutesFromTs(this.sunsetTimestamp);
     const nowM = this.getMinutesFromTs(nowTs);
@@ -1298,6 +1311,45 @@ export default class HomeScene extends Phaser.Scene {
       this.enableLogs = event.detail.visible;
     } else {
       this.enableLogs = !this.enableLogs;
+    }
+  }
+
+  handleTimezoneChange(evt) {
+    const detail = evt?.detail || {};
+    if (typeof detail.lat === 'number' && typeof detail.lon === 'number') {
+      this.sunLat = detail.lat;
+      this.sunLon = detail.lon;
+      this.loadSunriseSunset();
+    }
+    if (detail.tz) {
+      this.sunTimeZone = detail.tz;
+      this.updateDayNight(true);
+    }
+  }
+
+  getNowTsInTz(tz) {
+    try {
+      if (!tz) return Date.now();
+      const now = new Date();
+      // convert current time to target timezone by formatting then constructing Date
+      const locale = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      const parts = locale.formatToParts(now).reduce((acc, p) => {
+        acc[p.type] = p.value;
+        return acc;
+      }, {});
+      const iso = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`;
+      return Date.parse(iso);
+    } catch (e) {
+      return Date.now();
     }
   }
 

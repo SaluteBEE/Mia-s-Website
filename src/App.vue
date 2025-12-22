@@ -229,6 +229,7 @@ const setTimeMode = (mode) => {
   timeMode.value = mode;
   updateDate();
   fetchWeather();
+  emitTimezoneChange();
 };
 
 const handleDebugToggle = (evt) => {
@@ -414,6 +415,20 @@ function codeToText(code) {
   };
   return map[code] ?? '未知';
 }
+
+const emitTimezoneChange = () => {
+  const mode = timeMode.value === 'phobos' ? 'phobos' : 'mars';
+  const cfg = mode === 'phobos'
+    ? { lat: 57.7089, lon: 11.9746, tz: 'Europe/Stockholm' }
+    : { lat: 39.9042, lon: 116.4074, tz: 'Asia/Shanghai' };
+  try {
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('mia:timezone-change', { detail: cfg }));
+    }
+  } catch (e) {
+    /* ignore */
+  }
+};
 </script>
 
 <style scoped>
