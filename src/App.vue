@@ -71,18 +71,36 @@
     </div>
   </div>
 
-  <div v-if="showIntro" class="intro-screen" @click="handleIntroClick">
+  <div v-if="showAnnouncement" class="intro-screen" @click="handleIntroClick">
     <div class="intro-content">
       <div class="intro-title">For Mia</div>
       <div
-        v-for="(line, idx) in introVisibleLines"
+        v-for="(line, idx) in announcementVisibleLines"
         :key="idx"
         class="intro-line"
         :style="{ animationDelay: `${idx * 0.1}s` }"
       >
         {{ line }}
       </div>
-      <div class="intro-hint" v-if="introFinished">点击屏幕进入</div>
+      <div class="intro-hint" v-if="announcementFinished">点击屏幕进入</div>
+    </div>
+  </div>
+
+  <div v-if="showLinkModal" class="modal-mask">
+    <div class="modal-card" @click.stop>
+      <div class="modal-title">配置链接</div>
+      <div class="modal-field">
+        <label>物体</label>
+        <div class="modal-readonly">{{ linkForm.name || linkForm.id }}</div>
+      </div>
+      <div class="modal-field">
+        <label for="linkInput">链接</label>
+        <input id="linkInput" v-model="linkForm.url" placeholder="输入要跳转的链接" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="ghost-btn" @click="showLinkModal = false">取消</button>
+        <button type="button" class="primary-btn" @click="saveLinkConfig">保存</button>
+      </div>
     </div>
   </div>
 </template>
@@ -90,6 +108,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { createGame } from './game.js';
+import announcement from './config/announcement.js';
 
 const engine = ref('https://www.baidu.com/s?wd=');
 const query = ref('');
@@ -109,16 +128,14 @@ let timer = null;
 let weatherTimer = null;
 const currentTimeParts = computed(() => currentTime.value.split(''));
 const showDebugPanel = ref(false);
-const showIntro = ref(false);
-const introVisibleLines = ref([]);
-const introLines = [
-  '探索者 Mia 生日快乐！',
-  '我要去 Phobos 上进行空间跃迁器的研发啦。',
-  '不过我走之前重新修缮了基地作为送给你的礼物。',
-  '欢迎来到火星！一定要玩得开心！',
-];
-const introFinished = ref(false);
-let introTimer = null;
+const showAnnouncement = ref(false);
+const announcementVisibleLines = ref([]);
+const announcementLines = announcement.lines || [];
+const announcementVersion = announcement.version || 'default';
+const announcementFinished = ref(false);
+let announcementTimer = null;
+const showLinkModal = ref(false);
+const linkForm = ref({ id: '', name: '', url: '' });
 
 onMounted(() => {
   phaserGame = createGame('game-container');
@@ -130,7 +147,8 @@ onMounted(() => {
   weatherTimer = setInterval(fetchWeather, 1000 * 60 * 10); // 10 分钟刷新一次
 
   window.addEventListener('mia:debug-toggle', handleDebugToggle);
-  startIntroIfNeeded();
+  startAnnouncementIfNeeded();
+  window.addEventListener('mia:link-config', handleLinkConfig);
 });
 
 onBeforeUnmount(() => {
@@ -147,9 +165,10 @@ onBeforeUnmount(() => {
     weatherTimer = null;
   }
   window.removeEventListener('mia:debug-toggle', handleDebugToggle);
-  if (introTimer) {
-    clearTimeout(introTimer);
-    introTimer = null;
+  window.removeEventListener('mia:link-config', handleLinkConfig);
+  if (announcementTimer) {
+    clearTimeout(announcementTimer);
+    announcementTimer = null;
   }
 });
 
@@ -221,50 +240,71 @@ const handleDebugToggle = (evt) => {
   }
 };
 
-const startIntroIfNeeded = () => {
+const startAnnouncementIfNeeded = () => {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
-    const seen = window.localStorage.getItem('mia_intro_seen');
-    if (seen) return;
-    showIntro.value = true;
-    introVisibleLines.value = [];
-    introFinished.value = false;
+    const seen = window.localStorage.getItem('mia_announcement_seen_version');
+    if (seen === announcementVersion) return;
+    showAnnouncement.value = true;
+    announcementVisibleLines.value = [];
+    announcementFinished.value = false;
     let idx = 0;
     const step = () => {
-      if (idx < introLines.length) {
-        introVisibleLines.value = [...introVisibleLines.value, introLines[idx]];
+      if (idx < announcementLines.length) {
+        announcementVisibleLines.value = [...announcementVisibleLines.value, announcementLines[idx]];
         idx += 1;
-        introTimer = setTimeout(step, 1500);
+        announcementTimer = setTimeout(step, 1500);
       } else {
-        introFinished.value = true;
-        introTimer = null;
+        announcementFinished.value = true;
+        announcementTimer = null;
       }
     };
     step();
   } catch (e) {
-    showIntro.value = false;
+    showAnnouncement.value = false;
   }
 };
 
 const handleIntroClick = () => {
-  if (!showIntro.value) return;
-  if (!introFinished.value) {
-    introVisibleLines.value = [...introLines];
-    introFinished.value = true;
-    if (introTimer) {
-      clearTimeout(introTimer);
-      introTimer = null;
+  if (!showAnnouncement.value) return;
+  if (!announcementFinished.value) {
+    announcementVisibleLines.value = [...announcementLines];
+    announcementFinished.value = true;
+    if (announcementTimer) {
+      clearTimeout(announcementTimer);
+      announcementTimer = null;
     }
     return;
   }
-  showIntro.value = false;
+  showAnnouncement.value = false;
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem('mia_intro_seen', '1');
+      window.localStorage.setItem('mia_announcement_seen_version', announcementVersion);
     }
   } catch (e) {
     /* ignore */
   }
+};
+
+const handleLinkConfig = (evt) => {
+  const detail = evt?.detail || {};
+  linkForm.value = {
+    id: detail.id || '',
+    name: detail.name || '',
+    url: detail.url || '',
+  };
+  showLinkModal.value = true;
+};
+
+const saveLinkConfig = () => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && linkForm.value.id) {
+      window.localStorage.setItem(`mia_obj_link_${linkForm.value.id}`, linkForm.value.url || '');
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  showLinkModal.value = false;
 };
 
 function hydrateEngine() {
@@ -599,6 +639,86 @@ function codeToText(code) {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 120;
+}
+
+.modal-card {
+  width: min(420px, 90%);
+  background: rgba(12, 20, 40, 0.9);
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.4),
+    0 0 24px rgba(100, 200, 255, 0.3);
+  color: #e8f3ff;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.modal-field {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-field label {
+  font-size: 13px;
+  color: #9eb8d6;
+}
+
+.modal-field input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8f3ff;
+}
+
+.modal-readonly {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.primary-btn {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #4dc9ff, #5c7dff);
+  color: #0b1d36;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow:
+    0 10px 20px rgba(0, 0, 0, 0.35),
+    0 0 12px rgba(100, 200, 255, 0.5);
+}
+
+.primary-btn:hover {
+  background: linear-gradient(135deg, #6addff, #7d8dff);
 }
 
 .search-form {

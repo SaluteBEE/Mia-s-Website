@@ -7,4 +7,5 @@ export default {
   scale: 0.35,
   yOffset: -30, // 相对地表顶部的偏移（负值向上）
   depth: 1,
+  moveSpeed: 0.0005, // 移动速度系数，越小越慢
 };

@@ -9,6 +9,7 @@ import solarPanelPng from '../assets/solarPanel.png';
 import waterExtracterPng from '../assets/waterExtracter.png';
 import towerPng from '../assets/tower.png';
 import robotPng from '../assets/robot.png';
+import bilibiliPng from '../assets/bilibili.png';
 
 // 配置化的场景物体；按需在这里新增/调整。
 const worldObjects = [
@@ -39,6 +40,13 @@ const worldObjects = [
     buttonConfig: {
       offsetY: 120,
       scale: 0.5,
+      url: 'https://vidhub4.cc/',
+    },
+    configButtonConfig: {
+      enabled: true,
+      offsetX: 150,
+      offsetY: 0,
+      scale: 0.2,
     },
   },
   {
@@ -56,6 +64,35 @@ const worldObjects = [
       offsetY: 120,
       scale: 0.5,
       url: 'https://miro.com/app/board/uXjVJ_fU0kk=/',
+    },
+    configButtonConfig: {
+      enabled: true,
+      offsetX: 150,
+      offsetY: 0,
+      scale: 0.2,
+    },
+  },
+  {
+    id: 'bilibili',
+    name: 'Bilibili小机器人',
+    description: 'BL-25娱乐型机器人，为火星探索者带来快乐！',
+    angle: -0.1,
+    textureKey: 'bilibili',
+    texture: bilibiliPng,
+    scale: 0.36,
+    yOffset: 6,
+    depth: 0.47,
+    interactive: false,
+    buttonConfig: {
+      offsetY: 120,
+      scale: 0.5,
+      url: 'https://www.bilibili.com/',
+    },
+    configButtonConfig: {
+      enabled: true,
+      offsetX: 150,
+      offsetY: 0,
+      scale: 0.2,
     },
   },
   {
@@ -158,10 +195,6 @@ const worldObjects = [
     yOffset: 10,
     depth: 0.47,
     interactive: false,
-    waterButton: {
-      offsetY: 120,
-      scale: 0.5,
-    },
     buttonConfig: {
       offsetY: 120,
       scale: 0.5,
@@ -181,8 +214,8 @@ const worldObjects = [
   },
   {
     id: 'robot',
-    name: '机器人',
-    description: 'DAGU-1 机器人助手，陪伴并协助探索任务。点击它可以加载新的对话。',
+    name: 'DG-1机器人',
+    description: 'DG-1机器人助手，陪伴并协助探索任务。点击它可以加载新的对话。',
     angle: -0.33,
     textureKey: 'robot',
     texture: robotPng,

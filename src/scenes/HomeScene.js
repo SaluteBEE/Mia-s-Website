@@ -13,6 +13,7 @@ import robotDialog from '../config/robotDialog.js';
 import buttonOnPng from '../assets/buttonOn.png';
 import buttonDownPng from '../assets/buttonDown.png';
 import arrowPng from '../assets/arrow.png';
+import configPng from '../assets/config.png';
 
 export default class HomeScene extends Phaser.Scene {
   constructor() {
@@ -32,6 +33,7 @@ export default class HomeScene extends Phaser.Scene {
     this.load.image('walk6', walk6Png);
     this.load.image('planet', planetPng);
     this.load.image('arrow', arrowPng);
+    this.load.image('configIcon', configPng);
     this.load.image('homeBg', 'https://labs.phaser.io/assets/skies/deepblue.png');
 
     // 配置化物体纹理
@@ -199,7 +201,17 @@ export default class HomeScene extends Phaser.Scene {
       label.setInteractive({ useHandCursor: true });
       label.on('pointerdown', handleObjClick);
 
-      const entry = { cfg, img, label, descBg, descText, descGlow: descBg?.glow, isHovering: false };
+      const entry = {
+        cfg,
+        img,
+        label,
+        descBg,
+        descText,
+        descGlow: descBg?.glow,
+        isHovering: false,
+        hasActionButton: Boolean(cfg.buttonConfig || cfg.waterButton),
+        hasConfigButton: Boolean(cfg.configButtonConfig),
+      };
       const setHover = (hovered) => {
         entry.isHovering = hovered;
       };
@@ -256,7 +268,7 @@ export default class HomeScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    const rotationSpeed = 0.0018 * delta;
+    const rotationSpeed = (playerConfig.moveSpeed ?? 0.001) * delta;
     let currentMoveState = 'idle';
     // 蓄水缓慢流失：2 小时耗尽，且定期保存
     this.waterValue = Math.max(0, (this.waterValue ?? 0) - (this.waterDrainPerMs || 0) * delta);
@@ -949,16 +961,30 @@ export default class HomeScene extends Phaser.Scene {
       if (entry) {
         this.showObjectButton(entry, () => {
           entry.descText?.setText('火星曲库播放中，享受音乐吧！');
-          this.openNetEaseMusic();
+          const url = this.getObjectLink(entry);
+          if (url) {
+            window.open(url, '_blank');
+          } else {
+            this.openNetEaseMusic();
+          }
         });
       }
     } else if (cfg.id === 'billboard') {
       const entry = this.worldObjects.find((e) => e.cfg === cfg);
       if (entry) {
         this.showObjectButton(entry, () => {
-          const url = entry.cfg.buttonConfig?.url;
+          const url = this.getObjectLink(entry);
           if (url) window.open(url, '_blank');
           entry.descText?.setText('打开最新任务公告...');
+        });
+      }
+    } else if (cfg.id === 'bilibili') {
+      const entry = this.worldObjects.find((e) => e.cfg === cfg);
+      if (entry) {
+        this.showObjectButton(entry, () => {
+          const url = this.getObjectLink(entry);
+          if (url) window.open(url, '_blank');
+          entry.descText?.setText('正在与哔哩哔哩连接...');
         });
       }
     } else if (cfg.id === 'table') {
@@ -966,8 +992,9 @@ export default class HomeScene extends Phaser.Scene {
       if (entry) {
         this.showObjectButton(entry, () => {
           entry.descText?.setText('正在打开影片，请稍候...');
+          const url = this.getObjectLink(entry) || 'https://vidhub4.cc/';
           if (typeof window !== 'undefined') {
-            window.open('https://vidhub4.cc/', '_blank');
+            window.open(url, '_blank');
           }
         });
       }
@@ -1224,6 +1251,13 @@ export default class HomeScene extends Phaser.Scene {
         window.dispatchEvent(new CustomEvent('mia:log-toggle', { detail: { toggle: true } }));
         try {
           window.localStorage?.removeItem('mia_intro_seen');
+          window.localStorage?.removeItem('mia_announcement_seen_version');
+          // 重置自定义链接到默认
+          (worldObjects || []).forEach((cfgItem) => {
+            if (cfgItem?.id) {
+              window.localStorage?.removeItem(`mia_obj_link_${cfgItem.id}`);
+            }
+          });
         } catch (e) {
           // ignore
         }
@@ -1268,7 +1302,7 @@ export default class HomeScene extends Phaser.Scene {
   }
 
   showObjectButton(entry, onClick) {
-    if (!entry || !entry.descText) return;
+    if (!entry || !entry.descText || !entry.hasActionButton) return;
     let sprite = this.objectButtons.get(entry);
     if (!sprite) {
       sprite = this.add
@@ -1299,11 +1333,38 @@ export default class HomeScene extends Phaser.Scene {
       sprite.setScale(cfg.scale);
     }
     sprite.setVisible(true);
+
+    // 配置按钮（使用 config.png）
+    if (entry.hasConfigButton) {
+      let configBtn = this.objectButtons.get(`${entry.cfg.id}-config`);
+      if (!configBtn) {
+        const sprite = this.add
+          .sprite(x, y, 'configIcon')
+          .setScale(entry.cfg.configButtonConfig?.scale ?? 0.6)
+          .setInteractive({ useHandCursor: true })
+          .setVisible(false)
+          .setDepth((entry.cfg.depth ?? 0.4) + 0.25);
+        sprite.on('pointerup', () => this.onLinkConfigClick(entry));
+        sprite.on('pointerdown', () => sprite.setTint(0xb0d4ff));
+        sprite.on('pointerout', () => sprite.clearTint());
+        this.objectButtons.set(`${entry.cfg.id}-config`, sprite);
+        configBtn = sprite;
+      }
+      const cfgBtn = entry.cfg.configButtonConfig || {};
+      const cfgOffsetX = cfgBtn.offsetX ?? cfg.configOffsetX ?? cfg.offsetX ?? 80;
+      const cfgOffsetY = cfgBtn.offsetY ?? cfg.configOffsetY ?? 0;
+      configBtn.setPosition(x + cfgOffsetX, y + cfgOffsetY);
+      if (cfgBtn.scale || cfg.configScale) {
+        configBtn.setScale(cfgBtn.scale ?? cfg.configScale);
+      }
+      configBtn.setVisible(true);
+    }
   }
 
   hideObjectButtons() {
     this.objectButtons.forEach((sprite) => {
       sprite.setVisible(false);
+      if (sprite.clearTint) sprite.clearTint();
     });
   }
 
@@ -1339,6 +1400,33 @@ export default class HomeScene extends Phaser.Scene {
       this.player.anims.stop();
       this.player.setTexture(playerConfig.textureKey);
     }
+  }
+
+  onLinkConfigClick(entry) {
+    if (typeof window === 'undefined' || !entry?.cfg) return;
+    const url = this.getObjectLink(entry);
+    window.dispatchEvent(
+      new CustomEvent('mia:link-config', {
+        detail: {
+          id: entry.cfg.id,
+          name: entry.cfg.name,
+          url: url || '',
+        },
+      })
+    );
+  }
+
+  getObjectLink(entry) {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const key = `mia_obj_link_${entry?.cfg?.id}`;
+        const stored = window.localStorage.getItem(key);
+        if (stored) return stored;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return entry?.cfg?.buttonConfig?.url || entry?.cfg?.waterButton?.url || null;
   }
 }
 
